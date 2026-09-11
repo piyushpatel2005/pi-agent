@@ -54,6 +54,19 @@ way. To use it without installing at all, run `node /path/to/pi/cli/pi.ts`.
 
 Uninstall with `npm unlink -g pi-harness`.
 
+### A specific version
+
+Releases are git tags, so checking one out is how you pin:
+
+```bash
+git checkout v0.1.0
+npm install && npm link
+```
+
+To keep two versions side by side, clone twice and link only one of them; run
+the other by path (`node ~/pi-0.1.0/cli/pi.ts`). `pi version` tells you which
+one you are talking to.
+
 ## Quickstart
 
 In the project you want to work on:
@@ -135,6 +148,7 @@ pi log         # everything that has happened
 | `pi guard --tool <id>` | May this call proceed? (for harness hooks) |
 | `pi human-turn` | Record that a human acted (gates require this) |
 | `pi doctor` | Check this project's setup |
+| `pi version` | The release; `--json` adds schema and Node versions |
 
 Results for `--report`: `completed`, `needs-review`, `approved`, `rejected`,
 `failed`. Exit codes are `0` success, `1` error, `2` bad usage.
@@ -461,6 +475,127 @@ than restoring a state the run was never in. `pi doctor` checks the same thing.
 Rewinding to the first step resets the run to its original plan and needs no
 checkpoint at all. Steps that a `when` condition skipped stay skipped — that was
 a decision about the project, not work that was done.
+
+## Versioning
+
+Four things in pi carry a version, and they are not the same thing:
+
+| | What it versions | Who bumps it |
+|---|---|---|
+| `pi version` | the release of the tool | a release |
+| `state.json` `version` | the shape of run state | a migration |
+| `pi.config.json` `version` | the shape of project config | a migration |
+| a workflow's `version` | that workflow file | you |
+
+Most releases touch none of the schema versions. They exist so an old file meets
+a clear error rather than a confusing one — they are not a changelog.
+
+```bash
+pi version          # 0.1.0
+pi version --json   # pi, state, config, and Node versions
+```
+
+The release number lives in `package.json` and nowhere else; `core/version.ts`
+reads it from there. Two copies of a version number stay in agreement right up
+until the day they do not, and that is the day someone reports a bug against the
+wrong release.
+
+Every run records the version of pi that created it, so a run that looks wrong
+six months later can say which tool to blame. `pi doctor` points out when the
+active run was started by a different version than the one you are running.
+
+pi follows SemVer, and while it is below 1.0 a minor bump may break things. The
+release notes say so when it does.
+
+### Cutting a release
+
+Releases are annotated git tags named `v<version>`, with notes in
+[CHANGELOG.md](CHANGELOG.md). Write what you changed under `## [Unreleased]` as
+you go, then:
+
+```bash
+npm run release 0.2.0         # show what would happen; change nothing
+npm run release 0.2.0 --yes   # bump, close the changelog, commit, tag
+```
+
+The dry run prints the exact release notes so you read them before they are
+permanent. Applying it refuses to continue unless the working tree is clean, the
+tag is new, the `Unreleased` section has something in it, and the tests and
+typecheck both pass — a tag points at a commit, so it should point at one that
+works.
+
+It stops short of pushing and prints the command instead:
+
+```bash
+git push origin main v0.2.0
+```
+
+Pushing a tag is the irreversible part, because other people may fetch it. That
+one stays yours to say.
+
+A test keeps `package.json`, `CHANGELOG.md`, and `pi version` from drifting
+apart, so a release that forgot its notes fails before it ships rather than
+after.
+
+### Release candidates
+
+A version with a prerelease tag is treated as a candidate:
+
+```bash
+npm run release 1.0.0-rc.1 --yes
+npm run release 1.0.0-rc.2 --yes    # as many as you need
+npm run release 1.0.0 --yes         # the real thing
+```
+
+The one thing that differs: **a candidate does not consume the `Unreleased`
+section.** It bumps the version and cuts the tag, but the notes stay where they
+are, because they are describing work that is not finished shipping. If an RC
+closed the section, the real release would arrive with nothing to say — the
+opposite of the point.
+
+So `pi version` reports `1.0.0-rc.2` while `CHANGELOG.md` still has everything
+waiting under `Unreleased`, and the final `1.0.0` release collects it all.
+
+Candidates order the way SemVer says: `rc.2` follows `rc.1`, `rc.10` follows
+`rc.9`, `beta` follows `alpha`, and `1.0.0` follows all of its candidates but
+never the reverse.
+
+To share one, push the tag and have people check it out:
+
+```bash
+git push origin main v1.0.0-rc.1
+```
+
+If you ever publish to npm, an RC should go out under a dist-tag
+(`npm publish --tag next`) so that a plain `npm install` does not pick it up.
+The package is currently `private`, so this does not apply yet.
+
+### Writing the notes
+
+Write entries under `## [Unreleased]` as you go. To check you have not forgotten
+anything:
+
+```bash
+npm run changes        # commits since the last tag with no matching note
+npm run changes --all  # every commit, grouped into changelog headings
+```
+
+This drafts; it does not write the file. Commits and changelogs answer different
+questions — a commit explains a change to someone reading the code, a changelog
+tells a user what they can now do — so a changelog generated from commit
+messages reads like one. "Refactor the state store" is a true commit message and
+a useless release note.
+
+What it does instead is catch omissions. It lists commits whose wording does not
+appear in your notes, skipping the types that never earn an entry (`chore`,
+`test`, `ci`, `build`, `style`). The matching is deliberately crude and will
+raise some false alarms, which is why it only ever prints a list. The release
+dry run shows the same list, as a note rather than a blocker.
+
+If you write [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat:`, `fix:`, `docs:`), the draft is grouped under the right headings
+already. If you do not, everything lands under `Uncategorised` and you sort it
+yourself — the tool works either way.
 
 ## Development
 

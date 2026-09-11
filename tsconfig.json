@@ -11,6 +11,9 @@
     // no TypeScript-only runtime syntax (enum, namespace, parameter properties).
     "allowImportingTsExtensions": true,
     "noEmit": true,
+    // `core/version.ts` imports package.json so the release number has exactly
+    // one home. Node supports this natively via import attributes.
+    "resolveJsonModule": true,
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
 

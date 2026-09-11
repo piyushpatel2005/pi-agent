@@ -14,11 +14,14 @@
     "cli",
     "core",
     "harness",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "test": "node --test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "release": "node scripts/release.ts",
+    "changes": "node scripts/changes.ts"
   },
   "dependencies": {
     "zod": "^4.3.6"

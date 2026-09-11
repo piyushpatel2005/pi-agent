@@ -129,6 +129,17 @@ export type Checkpoint = z.infer<typeof Checkpoint>;
 
 export const RunState = z.object({
   version: z.literal(STATE_VERSION),
+  /**
+   * The pi release that started this run.
+   *
+   * Separate from `version` above, which is the schema shape. Two releases can
+   * write the same schema and still behave differently, so when a six-month-old
+   * run looks wrong this is the field that says which tool to blame.
+   *
+   * Optional because runs created before this field existed are still valid;
+   * absent means "older than 0.1.0".
+   */
+  piVersion: z.string().min(1).optional(),
   runId: z.uuid(),
   goal: z.string(),
 

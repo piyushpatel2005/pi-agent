@@ -54,8 +54,7 @@ import {
 import { EventType, type PiEvent } from "../core/schemas/events.ts";
 import { DirectiveKind, type Directive } from "../core/schemas/directive.ts";
 import { RunState, RunStatus, STATE_VERSION, StepStatus } from "../core/schemas/state.ts";
-
-const VERSION = "0.0.1";
+import { VERSION, versionInfo } from "../core/version.ts";
 
 type Args = {
   positional: string[];
@@ -179,6 +178,7 @@ function cmdStart(workspace: Workspace, args: Args): number {
   store.init(
     RunState.parse({
       version: STATE_VERSION,
+      piVersion: VERSION,
       runId,
       goal,
       workflow: workflow.id,
@@ -951,8 +951,17 @@ function cmdDoctor(workspace: Workspace): number {
   if (active) {
     const paths = runPaths(workspace.projectDir, active);
     try {
-      createStateStore(paths).read();
+      const state = createStateStore(paths).read();
       ok(`active run ${active} is readable`);
+
+      // Not a failure: pi is meant to survive being upgraded mid-run. But if a
+      // run starts behaving oddly right after an upgrade, this is the line that
+      // explains why, so it is worth saying out loud.
+      if (state.piVersion && state.piVersion !== VERSION) {
+        console.log(
+          `warn  this run was started by pi ${state.piVersion}; you are on ${VERSION}`,
+        );
+      }
     } catch (cause) {
       bad(`active run ${active} is unreadable: ${(cause as Error).message}`);
     }
@@ -1084,6 +1093,10 @@ function main(argv: string[]): number {
   }
 
   if (verb === "version" || verb === "--version") {
+    if (wantsJson(args)) {
+      console.log(JSON.stringify(versionInfo(), null, 2));
+      return 0;
+    }
     console.log(VERSION);
     return 0;
   }
