@@ -54,12 +54,15 @@ const ALLOW = JSON.stringify({ permission: Permission.Allow });
 
 const READ_TOOLS = new Set(["Read", "Grep", "Glob", "Search", "LS", "Codebase"]);
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "Delete", "Create"]);
+const SHELL_TOOLS = new Set(["Shell", "Bash", "Terminal"]);
 
 function mapTool(input: CursorInput, files: string[], workspace: Workspace): string | null {
   const name = input.tool_name ?? "";
 
   if (READ_TOOLS.has(name)) return ToolName.Read;
-  if (name === "Shell" || name === "Bash" || name === "Terminal") return ToolName.RunCommand;
+  if (SHELL_TOOLS.has(name)) {
+    return isControlCommand(input.tool_input ?? {}) ? null : ToolName.RunCommand;
+  }
   if (name === "Task" || name === "Agent") return ToolName.Delegate;
 
   if (WRITE_TOOLS.has(name)) {
@@ -72,6 +75,70 @@ function mapTool(input: CursorInput, files: string[], workspace: Workspace): str
   }
 
   return null;
+}
+
+// ── The control plane ───────────────────────────────────────────────────────
+//
+// pi's own steering commands are not the work; they are how the work is
+// directed, and how a refusal is obeyed. Guarding them deadlocks the loop: the
+// guard denies `run-command` at every gate and then says "run `pi next`", which
+// is a `run-command`. Every escape hatch welded shut by the guard pointing at
+// it.
+//
+// The allowance is a list rather than "anything named pi", because `install`,
+// `uninstall`, `rewind`, and `start` reshape the run or remove the guard
+// itself. Those stay governed, so the model cannot unguard itself or discard
+// the history to get past a refusal.
+
+const CONTROL_VERBS = new Set([
+  "next",
+  "report",
+  "status",
+  "log",
+  "review",
+  "runs",
+  "run",
+  "workflows",
+  "agents",
+  "sensors",
+  "checkpoints",
+  "doctor",
+  "version",
+  "human-turn",
+]);
+
+function isPiProgram(token: string): boolean {
+  return token === "pi" || token.endsWith("/pi");
+}
+
+function isScriptRunner(token: string): boolean {
+  const base = token.slice(token.lastIndexOf("/") + 1);
+  return base === "node" || base === "bun";
+}
+
+/** Is this shell call one of pi's own steering commands? */
+function isControlCommand(toolInput: Record<string, unknown>): boolean {
+  const raw = toolInput.command;
+  if (typeof raw !== "string") return false;
+
+  const command = raw.trim();
+
+  // A single invocation and nothing else. `pi status && rm -rf build` is not a
+  // pi command, and letting an operator through would turn this into the
+  // general-purpose escape hatch it exists to avoid.
+  if (/[;&|><`$(){}\n]/.test(command)) return false;
+
+  const tokens = command.split(/\s+/).filter((token) => token.length > 0);
+  if (tokens.length === 0) return false;
+
+  // Either `pi <verb>` or, from a checkout, `node cli/pi.ts <verb>`.
+  const verb = isPiProgram(tokens[0]!)
+    ? tokens[1]
+    : isScriptRunner(tokens[0]!) && /(^|\/)pi\.ts$/.test(tokens[1] ?? "")
+      ? tokens[2]
+      : undefined;
+
+  return verb !== undefined && CONTROL_VERBS.has(verb);
 }
 
 function isArtifact(file: string, workspace: Workspace): boolean {
