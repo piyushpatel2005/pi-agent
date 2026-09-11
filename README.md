@@ -160,6 +160,7 @@ pi log         # everything that has happened
 | `pi install` | Wire pi into your coding tool's hooks |
 | `pi uninstall` | Take pi back out; `--purge` drops config and history too |
 | `pi start "<goal>"` | Begin a run; `--workflow <id>` picks a non-default one |
+| `pi abandon` | Call off the active run for good; `--reason "..."` records why |
 | `pi next` | The one thing to do now; `--json` for machine use |
 | `pi report --step <id> --result <r>` | Record an outcome |
 | `pi runs` | Every run in the project; `--use <id>` switches |
@@ -191,6 +192,23 @@ Approval gates need evidence that a person was actually there. `pi report
 interactive terminal. When a harness drives `pi` non-interactively, the harness
 hook calls `pi human-turn` on the user's real messages instead. Either way, an
 agent running unattended cannot manufacture its own approval.
+
+This is also why `pi human-turn` is the one command your agent is never allowed
+to run itself, even though it may run `pi next` and `pi status` freely. An agent
+that could mint its own human turn could approve its own work, and every gate in
+the project would quietly stop meaning anything.
+
+### Changing your mind
+
+`pi abandon` ends the active run without pretending it succeeded. Use it when
+the plan changed, not when you want a break — parking happens on its own at step
+boundaries, and `pi runs --use <id>` picks a run back up.
+
+Abandoning matters more than it sounds. An active run governs the session: its
+gates wait for approvals that are never coming, and the guard keeps refusing
+work while naming commands that cannot help. Abandoning clears that, and the
+run stays on disk. An abandoned run is often the most interesting one in the
+project, and the reason it was called off is usually the part worth keeping.
 
 ## Small, reviewed changes
 

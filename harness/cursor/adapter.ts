@@ -53,7 +53,31 @@ const ALLOW = JSON.stringify({ permission: Permission.Allow });
 // through: pi governs the work it knows about, not every button in the editor.
 
 const READ_TOOLS = new Set(["Read", "Grep", "Glob", "Search", "LS", "Codebase"]);
-const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "Delete", "Create"]);
+
+/**
+ * Every tool that changes a file.
+ *
+ * The names Cursor actually sends come first; the rest are other hosts' names,
+ * kept so a port has one less thing to change. `StrReplace` is the one that
+ * matters most — it is how Cursor makes nearly every edit, and while it was
+ * missing from this set the guard never saw an edit at all. Budgets,
+ * `requireReviewBefore`, and the whole small-changes guarantee were inert, and
+ * silently so: an unmapped tool passes through without even a log line.
+ *
+ * Adding a tool to this set is how it becomes governed. A missing name is not
+ * a missing feature, it is a missing guard, so `tests/integration/cursor.test.ts`
+ * pins the list against the names Cursor documents.
+ */
+const WRITE_TOOLS = new Set([
+  "Write",
+  "StrReplace",
+  "EditNotebook",
+  "Delete",
+  "Edit",
+  "MultiEdit",
+  "Create",
+]);
+
 const SHELL_TOOLS = new Set(["Shell", "Bash", "Terminal"]);
 
 function mapTool(input: CursorInput, files: string[], workspace: Workspace): string | null {
@@ -104,8 +128,16 @@ const CONTROL_VERBS = new Set([
   "checkpoints",
   "doctor",
   "version",
-  "human-turn",
 ]);
+
+// Deliberately absent from the list above: `human-turn`. It mints the evidence
+// an approval gate waits on, so a model able to run it can manufacture the
+// human presence that makes a gate mean anything, and then approve its own
+// work. It is the one verb that has to come from a person's own terminal.
+//
+// Also absent: `install`, `uninstall`, `rewind`, `start`, `abandon`. Each of
+// them either removes the guard or discards the run, which would turn a refusal
+// into an inconvenience rather than a decision.
 
 function isPiProgram(token: string): boolean {
   return token === "pi" || token.endsWith("/pi");
@@ -206,8 +238,31 @@ function toolCallOf(input: CursorInput, workspace: Workspace): ToolCall | null {
 
 // ── Targets ─────────────────────────────────────────────────────────────────
 
+/**
+ * Which project this event is about.
+ *
+ * Not simply `workspace_roots[0]`. Some events carry no `cwd` at all —
+ * `beforeSubmitPrompt` is one — and someone with three folders open is not
+ * necessarily working in the first. Taking the first root meant pi looked for a
+ * run in the wrong project, found none, and returned quietly. The visible
+ * symptom was that approval gates could never be cleared: the human turn a gate
+ * waits for was being recorded nowhere.
+ *
+ * So: ask which candidate actually has a run. That is the project this event
+ * belongs to, whatever order the editor lists its folders in.
+ */
 function projectDirOf(input: CursorInput): string {
-  return input.cwd ?? input.workspace_roots?.[0] ?? process.cwd();
+  const candidates = [input.cwd, ...(input.workspace_roots ?? [])].filter(
+    (dir): dir is string => typeof dir === "string" && dir !== "",
+  );
+
+  for (const dir of candidates) {
+    if (activeRunId(dir)) return dir;
+  }
+
+  // No run anywhere. Any answer is as good as another; the handlers all return
+  // early on a missing run, so this only decides which directory they look in.
+  return candidates[0] ?? process.cwd();
 }
 
 function guard(input: CursorInput): string {

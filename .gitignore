@@ -5,3 +5,14 @@ dist/
 # Local run state produced while dogfooding pi on itself.
 pi/runs/
 .DS_Store
+
+# >>> pi >>>
+# Written by `pi install`, removed by `pi uninstall`.
+# Delete this block by hand once the team decides to commit pi's config.
+/pi/runs/
+/pi.config.json
+/.cursor/skills/pi/
+/.cursor/rules/pi.mdc
+/.cursor/hooks.json
+/.cursor/cli.json
+# <<< pi <<<

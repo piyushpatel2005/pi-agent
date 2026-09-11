@@ -51,6 +51,7 @@ import {
   CONFIG_FILE,
   WorkspaceError,
   activeRunId,
+  clearActiveRun,
   listRunSummaries,
   listRuns,
   openWorkspace,
@@ -438,6 +439,41 @@ function cmdHumanTurn(workspace: Workspace, args: Args): number {
     return 1;
   }
   console.log(`Recorded a human turn (${source}).`);
+  return 0;
+}
+
+/**
+ * Call off a run you no longer want.
+ *
+ * Without this a run you have lost interest in stays active forever, and keeps
+ * guarding you: every refusal names a command to get past it, and an abandoned
+ * run's gates are never going to open. Parking is for coming back; this is for
+ * not coming back.
+ *
+ * The active pointer is cleared, so the guard stops governing the session
+ * entirely. The run itself stays on disk — an abandoned run is often the one
+ * worth reading later, and deleting evidence to tidy up is how you lose the
+ * only record of what went wrong.
+ */
+function cmdAbandon(workspace: Workspace, args: Args): number {
+  const { runId, paths } = requireActiveRun(workspace.projectDir);
+  const reason = flagString(args, "reason") ?? "";
+
+  const state = createStateStore(paths).update((draft) => {
+    draft.status = RunStatus.Abandoned;
+    draft.currentStep = null;
+  });
+
+  createEventLog(paths.events, runId).append({ type: EventType.RunAbandoned, reason });
+  clearActiveRun(workspace.projectDir);
+
+  console.log(`Abandoned: ${state.goal}`);
+  console.log(`Run ${runId}`);
+  if (reason !== "") console.log(`Reason: ${reason}`);
+
+  console.log("");
+  console.log("Its history is still on disk; `pi runs` lists it.");
+  console.log("Nothing is guarded now. Start again with `pi start \"<goal>\"`.");
   return 0;
 }
 
@@ -1170,6 +1206,7 @@ Usage
   pi install [--no-gitignore]              wire pi into your coding tool's hooks
   pi uninstall [--purge]                   take pi back out; --purge drops config+history
   pi start "<goal>" [--workflow <id>]      begin a run
+  pi abandon [--reason "..."]              call off the active run for good
   pi runs [--use <id>] [--json]            list runs, or switch to one
   pi status [--json]                       where the active run is
   pi next [--brief] [--json]               what to do now; --brief for the full prompt
@@ -1227,6 +1264,8 @@ function main(argv: string[]): number {
       return cmdUninstall(workspace, args);
     case "start":
       return cmdStart(workspace, args);
+    case "abandon":
+      return cmdAbandon(workspace, args);
     case "next":
       return cmdNext(workspace, args);
     case "agents":

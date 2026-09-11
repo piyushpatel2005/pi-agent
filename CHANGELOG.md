@@ -20,6 +20,29 @@ so when it does.
 - A fourth shipped workflow, `docs`: survey the project, write the concept,
   guide, reference, and extension pages, then check every claim in them against
   the code.
+- `pi abandon [--reason "..."]` ends a run you no longer want. Until now the
+  only exits were finishing and failing, so a run you had lost interest in kept
+  guarding the session and waiting at gates nobody would ever answer. The run
+  stays on disk and `pi runs` lists it as `abandoned`.
+
+### Fixed
+
+- **Edits made through Cursor were not guarded.** pi recognised `Write` and
+  `Delete` but not `StrReplace` or `EditNotebook`, which is how Cursor makes
+  nearly every edit. Change budgets, `requireReviewBefore`, and review freezes
+  did not apply to those edits, and nothing reported it — an unrecognised tool
+  was allowed silently. Anyone who has been relying on budgets under Cursor
+  should assume they were not being enforced.
+- **Approval gates could not be cleared in a multi-folder workspace.** pi looked
+  for the run in whichever folder the editor listed first, so the human turn a
+  gate waits on was recorded nowhere, and approving failed with "no human has
+  acted since the last gate". pi now finds the folder that actually has the run.
+- **The guard could refuse the command it was telling you to run.** With no step
+  active, pi denied shell commands and advised running `pi next` — itself a
+  shell command. A run could reach a state with no way forward. pi's own
+  read-only and run-advancing commands are now allowed through.
+- `pi uninstall` left an empty `.cursor/cli.json`, along with empty `.cursor/`
+  directories, when pi had created them.
 
 ## [0.1.0] - 2026-09-11
 

@@ -54,6 +54,12 @@ export const RunStatus = {
   Parked: "parked",
   Completed: "completed",
   Failed: "failed",
+  /**
+   * Called off by a human. Distinct from `failed`, which says the work did not
+   * succeed; this says nobody wants it finished. Kept on disk either way — the
+   * record of an abandoned run is often the most interesting one there is.
+   */
+  Abandoned: "abandoned",
 } as const;
 
 export type RunStatus = (typeof RunStatus)[keyof typeof RunStatus];

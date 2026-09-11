@@ -18,6 +18,7 @@ export const EventType = {
   RunStarted: "run.started",
   RunCompleted: "run.completed",
   RunFailed: "run.failed",
+  RunAbandoned: "run.abandoned",
 
   // Step lifecycle. Every step transition lands here, which is what makes the
   // log replayable into the current state.
@@ -99,6 +100,9 @@ export const PiEvent = z.discriminatedUnion("type", [
   }),
   event(EventType.RunFailed, {
     error: z.string(),
+  }),
+  event(EventType.RunAbandoned, {
+    reason: z.string(),
   }),
 
   event(EventType.StepStarted, {
