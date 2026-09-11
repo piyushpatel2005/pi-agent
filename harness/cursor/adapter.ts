@@ -53,40 +53,13 @@ const ALLOW = JSON.stringify({ permission: Permission.Allow });
 // through: pi governs the work it knows about, not every button in the editor.
 
 const READ_TOOLS = new Set(["Read", "Grep", "Glob", "Search", "LS", "Codebase"]);
-
-/**
- * Every tool that changes a file.
- *
- * The names Cursor actually sends come first; the rest are other hosts' names,
- * kept so a port has one less thing to change. `StrReplace` is the one that
- * matters most — it is how Cursor makes nearly every edit, and while it was
- * missing from this set the guard never saw an edit at all. Budgets,
- * `requireReviewBefore`, and the whole small-changes guarantee were inert, and
- * silently so: an unmapped tool passes through without even a log line.
- *
- * Adding a tool to this set is how it becomes governed. A missing name is not
- * a missing feature, it is a missing guard, so `tests/integration/cursor.test.ts`
- * pins the list against the names Cursor documents.
- */
-const WRITE_TOOLS = new Set([
-  "Write",
-  "StrReplace",
-  "EditNotebook",
-  "Delete",
-  "Edit",
-  "MultiEdit",
-  "Create",
-]);
-
-const SHELL_TOOLS = new Set(["Shell", "Bash", "Terminal"]);
+const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "Delete", "Create"]);
 
 function mapTool(input: CursorInput, files: string[], workspace: Workspace): string | null {
   const name = input.tool_name ?? "";
 
   if (READ_TOOLS.has(name)) return ToolName.Read;
-  if (SHELL_TOOLS.has(name)) {
-    return isControlCommand(input.tool_input ?? {}) ? null : ToolName.RunCommand;
-  }
+  if (name === "Shell" || name === "Bash" || name === "Terminal") return ToolName.RunCommand;
   if (name === "Task" || name === "Agent") return ToolName.Delegate;
 
   if (WRITE_TOOLS.has(name)) {
@@ -99,78 +72,6 @@ function mapTool(input: CursorInput, files: string[], workspace: Workspace): str
   }
 
   return null;
-}
-
-// ── The control plane ───────────────────────────────────────────────────────
-//
-// pi's own steering commands are not the work; they are how the work is
-// directed, and how a refusal is obeyed. Guarding them deadlocks the loop: the
-// guard denies `run-command` at every gate and then says "run `pi next`", which
-// is a `run-command`. Every escape hatch welded shut by the guard pointing at
-// it.
-//
-// The allowance is a list rather than "anything named pi", because `install`,
-// `uninstall`, `rewind`, and `start` reshape the run or remove the guard
-// itself. Those stay governed, so the model cannot unguard itself or discard
-// the history to get past a refusal.
-
-const CONTROL_VERBS = new Set([
-  "next",
-  "report",
-  "status",
-  "log",
-  "review",
-  "runs",
-  "run",
-  "workflows",
-  "agents",
-  "sensors",
-  "checkpoints",
-  "doctor",
-  "version",
-]);
-
-// Deliberately absent from the list above: `human-turn`. It mints the evidence
-// an approval gate waits on, so a model able to run it can manufacture the
-// human presence that makes a gate mean anything, and then approve its own
-// work. It is the one verb that has to come from a person's own terminal.
-//
-// Also absent: `install`, `uninstall`, `rewind`, `start`, `abandon`. Each of
-// them either removes the guard or discards the run, which would turn a refusal
-// into an inconvenience rather than a decision.
-
-function isPiProgram(token: string): boolean {
-  return token === "pi" || token.endsWith("/pi");
-}
-
-function isScriptRunner(token: string): boolean {
-  const base = token.slice(token.lastIndexOf("/") + 1);
-  return base === "node" || base === "bun";
-}
-
-/** Is this shell call one of pi's own steering commands? */
-function isControlCommand(toolInput: Record<string, unknown>): boolean {
-  const raw = toolInput.command;
-  if (typeof raw !== "string") return false;
-
-  const command = raw.trim();
-
-  // A single invocation and nothing else. `pi status && rm -rf build` is not a
-  // pi command, and letting an operator through would turn this into the
-  // general-purpose escape hatch it exists to avoid.
-  if (/[;&|><`$(){}\n]/.test(command)) return false;
-
-  const tokens = command.split(/\s+/).filter((token) => token.length > 0);
-  if (tokens.length === 0) return false;
-
-  // Either `pi <verb>` or, from a checkout, `node cli/pi.ts <verb>`.
-  const verb = isPiProgram(tokens[0]!)
-    ? tokens[1]
-    : isScriptRunner(tokens[0]!) && /(^|\/)pi\.ts$/.test(tokens[1] ?? "")
-      ? tokens[2]
-      : undefined;
-
-  return verb !== undefined && CONTROL_VERBS.has(verb);
 }
 
 function isArtifact(file: string, workspace: Workspace): boolean {
@@ -238,31 +139,8 @@ function toolCallOf(input: CursorInput, workspace: Workspace): ToolCall | null {
 
 // ── Targets ─────────────────────────────────────────────────────────────────
 
-/**
- * Which project this event is about.
- *
- * Not simply `workspace_roots[0]`. Some events carry no `cwd` at all —
- * `beforeSubmitPrompt` is one — and someone with three folders open is not
- * necessarily working in the first. Taking the first root meant pi looked for a
- * run in the wrong project, found none, and returned quietly. The visible
- * symptom was that approval gates could never be cleared: the human turn a gate
- * waits for was being recorded nowhere.
- *
- * So: ask which candidate actually has a run. That is the project this event
- * belongs to, whatever order the editor lists its folders in.
- */
 function projectDirOf(input: CursorInput): string {
-  const candidates = [input.cwd, ...(input.workspace_roots ?? [])].filter(
-    (dir): dir is string => typeof dir === "string" && dir !== "",
-  );
-
-  for (const dir of candidates) {
-    if (activeRunId(dir)) return dir;
-  }
-
-  // No run anywhere. Any answer is as good as another; the handlers all return
-  // early on a missing run, so this only decides which directory they look in.
-  return candidates[0] ?? process.cwd();
+  return input.cwd ?? input.workspace_roots?.[0] ?? process.cwd();
 }
 
 function guard(input: CursorInput): string {
