@@ -84,6 +84,18 @@ export type GuardContext = {
 /** Tools that only read. They stay available even when the run is between steps. */
 const READ_ONLY: ReadonlySet<string> = new Set([ToolName.Read, ToolName.Search]);
 
+/**
+ * Tools whose calls the change budget counts.
+ *
+ * The budget exists to keep a code diff reviewable. A step's declared artifacts
+ * are its output, not its diff. `checkBudget` and `recordChange` must agree.
+ */
+const BUDGETED: ReadonlySet<string> = new Set([ToolName.WriteCode]);
+
+export function spendsChangeBudget(tool: string): boolean {
+  return BUDGETED.has(tool);
+}
+
 const ALLOW: Verdict = { permission: Permission.Allow };
 
 function deny(reason: DenialReason, message: string): Verdict {
@@ -217,6 +229,8 @@ function checkBudget(
   stepState: StepState,
   call: ToolCall,
 ): Verdict | null {
+  if (!spendsChangeBudget(call.tool)) return null;
+
   const budget = step.changeBudget;
   if (!budget) return null;
 
@@ -271,6 +285,8 @@ function describeOverBudget(
  * ran, so the tally reflects work done rather than work merely proposed.
  */
 export function recordChange(draft: RunState, call: ToolCall): void {
+  if (!spendsChangeBudget(call.tool)) return;
+
   const stepId = draft.currentStep;
   if (stepId === null) return;
 

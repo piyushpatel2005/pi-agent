@@ -26,7 +26,7 @@ import {
   recordChange,
   type ToolCall,
 } from "../../core/engine/guard.ts";
-import { runPaths } from "../../core/engine/paths.ts";
+import { repoPath, runPaths } from "../../core/engine/paths.ts";
 import { createStateStore } from "../../core/engine/state-store.ts";
 import {
   activeRunId,
@@ -232,10 +232,13 @@ function linesOf(toolInput: Record<string, unknown>, file: string | undefined): 
 
 function toolCallOf(input: CursorInput, workspace: Workspace): ToolCall | null {
   const toolInput = input.tool_input ?? {};
-  const files = filesOf(toolInput);
-  const tool = mapTool(input, files, workspace);
+  const rawFiles = filesOf(toolInput);
+  const tool = mapTool(input, rawFiles, workspace);
 
-  return tool === null ? null : { tool, files, lines: linesOf(toolInput, files[0]) };
+  if (tool === null) return null;
+
+  const files = rawFiles.map((file) => repoPath(workspace.projectDir, file));
+  return { tool, files, lines: linesOf(toolInput, rawFiles[0]) };
 }
 
 // ── Targets ─────────────────────────────────────────────────────────────────
@@ -318,10 +321,7 @@ function record(input: CursorInput): string {
   const workspace = openWorkspace(projectDir);
   const call = toolCallOf(input, workspace);
 
-  // Only repository changes count. Artifact writes are the step's own output
-  // and must not spend the budget meant for code.
-  if (!call || call.tool !== ToolName.WriteCode) return "";
-  if ((call.files?.length ?? 0) === 0) return "";
+  if (!call || (call.files?.length ?? 0) === 0) return "";
 
   createStateStore(runPaths(projectDir, runId)).update((draft) => recordChange(draft, call));
   return "";

@@ -36,7 +36,7 @@ import {
   rewindEvents,
   saveSnapshot,
 } from "../core/engine/checkpoints.ts";
-import { checkpointPath, runPaths } from "../core/engine/paths.ts";
+import { checkpointPath, repoPath, runPaths } from "../core/engine/paths.ts";
 import {
   RouterError,
   StepResult,
@@ -625,11 +625,12 @@ function cmdSensors(workspace: Workspace, args: Args): number {
 // fast, and fails open: if the guard cannot tell whether something is allowed,
 // blocking the user's editor is worse than letting the call through.
 
-function toolCallFrom(args: Args): ToolCall {
+function toolCallFrom(args: Args, projectDir: string): ToolCall {
   const files = flagString(args, "files")
     ?.split(",")
     .map((file) => file.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((file) => repoPath(projectDir, file));
 
   const lines = Number.parseInt(flagString(args, "lines") ?? "0", 10);
 
@@ -641,7 +642,7 @@ function toolCallFrom(args: Args): ToolCall {
 }
 
 function cmdGuard(workspace: Workspace, args: Args): number {
-  const call = toolCallFrom(args);
+  const call = toolCallFrom(args, workspace.projectDir);
   if (call.tool === "") {
     console.error("Usage: pi guard --tool <id> [--files a,b] [--lines n] [--record]");
     return 2;
@@ -693,7 +694,7 @@ function cmdReview(workspace: Workspace, args: Args): number {
 
   switch (action) {
     case "request":
-      return reviewRequest(store, log, args);
+      return reviewRequest(workspace, store, log, args);
     case "resolve":
       return reviewResolve(workspace, store, log, args);
     case "status":
@@ -707,13 +708,16 @@ function cmdReview(workspace: Workspace, args: Args): number {
 type Store = ReturnType<typeof createStateStore>;
 type Log = ReturnType<typeof createEventLog>;
 
-function reviewRequest(store: Store, log: Log, args: Args): number {
+function reviewRequest(workspace: Workspace, store: Store, log: Log, args: Args): number {
   const summary = flagString(args, "summary");
   const files = flagString(args, "files")
     ?.split(",")
     .map((raw) => raw.trim())
     .filter(Boolean)
-    .map(parseReviewedFile);
+    .map((raw) => {
+      const file = parseReviewedFile(raw);
+      return { ...file, path: repoPath(workspace.projectDir, file.path) };
+    });
 
   if (!summary || !files || files.length === 0) {
     console.error('Usage: pi review request --summary "<what and why>" --files <paths> [--lines n]');

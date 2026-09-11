@@ -4,7 +4,26 @@
 // quietly disagree about them. Everything a run produces lives under a single
 // directory, which is what makes a run easy to inspect, archive, or delete.
 
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
+
+/**
+ * A repository path as pi records it: relative to the project root, forward
+ * slashes, no leading `./`.
+ *
+ * Receipts hold what a human typed; hooks report what the editor sent. Both
+ * must pass through here before they are compared or tallied.
+ */
+export function repoPath(projectDir: string, file: string): string {
+  const root = resolve(projectDir);
+  const resolved = isAbsolute(file) ? resolve(file) : resolve(root, file);
+  const rel = relative(root, resolved).replace(/\\/g, "/");
+
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    return resolved.replace(/\\/g, "/");
+  }
+
+  return rel;
+}
 
 export type RunPaths = {
   /** `<project>/pi/runs/<runId>` */

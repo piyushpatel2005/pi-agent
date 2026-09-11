@@ -229,8 +229,12 @@ describe("the adapter during a run", () => {
       "summary.md",
     );
 
-    const verdict = preToolUse("Write", { file_path: artifact, contents: "a\nb\nc" });
-    assert.equal(verdict.permission, "allow", "over budget for code, but this is an artifact");
+    // The step is at 45/50 lines after the prior test. Twenty lines of artifact
+    // prose would land at 65/50 if it were charged — the old test passed at
+    // three lines and never proved the exemption.
+    const contents = Array.from({ length: 20 }, (_, index) => `line ${index}`).join("\n");
+    const verdict = preToolUse("Write", { file_path: artifact, contents });
+    assert.equal(verdict.permission, "allow", "artifact prose must not touch the code budget");
   });
 
   test("an open review freezes writing through the hook too", () => {

@@ -8,6 +8,7 @@ import {
   denialEvent,
   evaluate,
   recordChange,
+  spendsChangeBudget,
   type ToolCall,
   type Verdict,
 } from "../../core/engine/guard.ts";
@@ -30,7 +31,7 @@ const WORKFLOW = (() => {
         agent: "backend-developer",
         objective: "Build it.",
         produces: ["summary.md"],
-        tools: ["read", "search", "write-code", "run-command", "request-review"],
+        tools: ["read", "search", "write-code", "write-artifact", "run-command", "request-review"],
         changeBudget: { maxFiles: 3, maxLines: 100 },
       },
       {
@@ -284,6 +285,24 @@ describe("the change budget", () => {
     const state = running("build", { changedFiles: ["a.ts", "b.ts", "c.ts"], changedLines: 10 });
     assert.equal(
       check(state, { tool: ToolName.WriteCode, files: ["a.ts"], lines: 5 }).permission,
+      Permission.Allow,
+    );
+  });
+
+  test("only write-code spends the change budget", () => {
+    assert.equal(spendsChangeBudget(ToolName.WriteCode), true);
+    assert.equal(spendsChangeBudget(ToolName.WriteArtifact), false);
+    assert.equal(spendsChangeBudget(ToolName.RunCommand), false);
+  });
+
+  test("write-artifact is not charged against the budget", () => {
+    const state = running("build", { changedFiles: ["a.ts", "b.ts", "c.ts"], changedLines: 95 });
+    assert.equal(
+      check(state, {
+        tool: ToolName.WriteArtifact,
+        files: ["pi/runs/x/artifacts/fix/summary.md"],
+        lines: 200,
+      }).permission,
       Permission.Allow,
     );
   });
