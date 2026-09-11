@@ -102,6 +102,16 @@ export function evaluate(
   // even orient itself enough to fix whatever is wrong.
   if (readOnly) return ALLOW;
 
+  // A completed run has nothing left to protect: no step is active, no budget
+  // is in force, and the next `pi start` re-engages the guard. Refusing here
+  // made finishing successfully indistinguishable from being stuck, and no verb
+  // a model can reach gets it out — `start` and `rewind` are both deliberately
+  // outside the harness control plane.
+  //
+  // `failed` and `parked` still refuse, for their own reasons: a failed run's
+  // plan turned out to be wrong, and a parked run still has work pending.
+  if (state.status === RunStatus.Completed) return ALLOW;
+
   if (state.status !== RunStatus.Active) {
     return deny(
       DenialReason.RunNotActive,

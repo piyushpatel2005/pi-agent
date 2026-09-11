@@ -237,45 +237,21 @@ when it skips.
 Eight roles, each a Markdown file in `core/agents/`. See them with `pi agents`,
 or read one in full with `pi agents backend-developer`.
 
-| Persona | Owns | Writes code |
-| --- | --- | --- |
-| `business-analyst` | Requirements, acceptance criteria, final validation | no |
-| `solution-architect` | Boundaries, contracts, technology choices | structure only |
-| `ui-designer` | Screens, flows, states, accessibility | no |
-| `frontend-developer` | Client implementation against contract and design | yes |
-| `backend-developer` | Services, data models, APIs, migrations | yes |
-| `qa-engineer` | Test strategy and unit/integration/e2e tests | yes |
-| `devops-engineer` | Infrastructure, CI/CD, environments, security posture | yes |
-| `technical-writer` | Documentation for people outside the project, verified against the code | yes |
-
 The roster is small on purpose. Every handoff between roles loses context, so
 eight broad personas beat twenty narrow ones.
 
-Each file's frontmatter declares what the role may touch:
-
-```yaml
----
-id: backend-developer
-name: Backend Developer
-description: Implements services, data models, and APIs against the approved contract.
-tools: [read, search, write-artifact, write-code, run-command, request-review]
-denyTools: [delegate]
-changeBudget: { maxFiles: 8, maxLines: 300 }
-writesCode: true
----
-```
-
-`tools` is a **ceiling, not a default**. A workflow step grants a subset of it;
-a step asking for more fails to compile, so a workflow cannot hand the business
-analyst a code editor by asking nicely. `delegate` is denied to every persona —
-only the conductor dispatches, so a worker can't quietly become an orchestrator
-and bury a decision one level below what the log can see.
-
-`writesCode` decides whether the generated documentation contract appears in
-that role's brief.
+Each file's frontmatter declares what the role may touch, and `tools` is a
+**ceiling, not a default**. A workflow step grants a subset of it; a step asking
+for more fails to compile, so a workflow cannot hand the business analyst a code
+editor by asking nicely. `delegate` is denied to every persona — only the
+conductor dispatches, so a worker can't quietly become an orchestrator and bury
+a decision one level below what the log can see.
 
 To change how a role works, drop a file with the same `id` in `pi/agents/`. It
 replaces the shipped one.
+
+**[Personas](docs/extending/personas.md)** covers every frontmatter field, how
+tool grants resolve, and what belongs in the body.
 
 ### The brief
 
@@ -389,30 +365,15 @@ Shipped workflows live inside the `pi` installation. Your own go in
 matches a shipped workflow shadows it — that is how you retune `feature`
 without forking `pi`. `pi workflows` marks the project ones `(project)`.
 
-A step looks like this:
-
-```json
-{
-  "id": "backend-implementation",
-  "agent": "backend-developer",
-  "objective": "Implement the services and data model behind the contract.",
-  "when": ["hasBackend"],
-  "consumes": ["architecture.md", "api-contract.md"],
-  "produces": ["backend-summary.md"],
-  "tools": ["read", "write-code", "run-command", "request-review"],
-  "changeBudget": { "maxFiles": 8, "maxLines": 300 },
-  "requireReviewBefore": ["write-code"],
-  "gate": "approval",
-  "sensors": ["type-check", "linter", "docs-coverage"]
-}
-```
-
 Workflows are compiled, not just parsed. `pi` rejects a workflow that consumes
 an artifact nobody produces, consumes one produced later, declares two producers
 for the same artifact, requires review before a tool the step was never granted,
 names a persona that does not exist, grants a persona a tool it does not hold,
 names an unknown sensor, or wires a conditional producer into an unconditional
 consumer. Run `pi doctor` to see what failed and why.
+
+**[Workflows](docs/extending/workflows.md)** documents every field a step may
+declare, with a worked example.
 
 ## The harness layer
 
@@ -425,6 +386,9 @@ layer is the seam between them, and it is deliberately thin — three things:
 2. **A skill** (`.cursor/skills/pi/SKILL.md`) telling the agent how to drive the
    `next` / work / `report` loop.
 3. **A permission** so running `pi` doesn't prompt on every call.
+
+**[Harnesses](docs/extending/harnesses.md)** documents the seam in full, for
+porting pi to a tool that is not Cursor.
 
 `pi uninstall` reverses it: pi's hooks come out, `Shell(pi)` is revoked, and the
 skill and rule are deleted, while every hook and permission that was not pi's is

@@ -11,7 +11,8 @@
 //     may carry an `agent_message`. Empty or malformed stdout is a failure, so
 //     this file must print valid JSON on every path it can possibly take.
 //   - sessionStart context is {"additional_context"} (snake_case).
-//   - stop cannot refuse a stop; it may only offer {"followup_message"}.
+//   - stop may only offer {"followup_message"}, which Cursor submits as the
+//     next user message. pi deliberately does not use it: see below.
 //
 // This adapter fails OPEN: any internal error allows the call. A guard that
 // bricks someone's editor when pi has a bug is worse than one that occasionally
@@ -35,6 +36,7 @@ import {
 import { ToolName } from "../../core/schemas/agent.ts";
 import { EventType } from "../../core/schemas/events.ts";
 import { StepStatus } from "../../core/schemas/state.ts";
+import { existsSync, readFileSync } from "node:fs";
 
 type CursorInput = {
   hook_event_name?: string;
@@ -53,7 +55,12 @@ const ALLOW = JSON.stringify({ permission: Permission.Allow });
 // through: pi governs the work it knows about, not every button in the editor.
 
 const READ_TOOLS = new Set(["Read", "Grep", "Glob", "Search", "LS", "Codebase"]);
-const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "Delete", "Create"]);
+
+// Cursor's actual edit tools. `StrReplace` is the one that matters: it is how
+// nearly every edit is made, and while it was missing here the guard never saw
+// an edit at all — budgets and review requirements were inert, and nothing said
+// so, because an unmapped tool is allowed silently.
+const WRITE_TOOLS = new Set(["Write", "StrReplace", "EditNotebook", "Delete"]);
 
 function mapTool(input: CursorInput, files: string[], workspace: Workspace): string | null {
   const name = input.tool_name ?? "";
@@ -72,6 +79,69 @@ function mapTool(input: CursorInput, files: string[], workspace: Workspace): str
   }
 
   return null;
+}
+
+// ── The control plane ───────────────────────────────────────────────────────
+//
+// Every refusal names a `pi` command that puts things right. If that command is
+// itself governed, the refusal is unactionable: the verbs that move a run all
+// have to run while no step is active or while one is frozen at a gate, which
+// is precisely when nothing is granted. So pi's own read-and-advance verbs are
+// answered here, before the guard is consulted at all.
+//
+// This is an allowlist, not a denylist. A verb that removes the guard or
+// discards the run (`install`, `uninstall`, `start`, `rewind`, `abandon`) is
+// absent on purpose, so a refusal stays a decision rather than an
+// inconvenience.
+
+const CONTROL_VERBS: ReadonlySet<string> = new Set([
+  "status", "next", "report", "log", "runs", "review",
+  "sensors", "checkpoints", "workflows", "agents", "doctor", "version",
+]);
+
+/**
+ * The one verb a model must never reach, in any state.
+ *
+ * Human presence is what makes a gate mean something. A model that could mint
+ * its own human turn could approve its own work.
+ */
+const HUMAN_TURN = "human-turn";
+
+/**
+ * Anything that lets a second command ride along on the first.
+ *
+ * `pi status && rm -rf build` is not a pi command, and neither is
+ * `pi status > overwrite.ts`. Rather than try to parse a shell, treat any
+ * metacharacter as disqualifying.
+ */
+const SHELL_METACHARACTERS = /[;&|<>`$()]/;
+
+/** The pi verb this command invokes, or null if it is not a bare pi command. */
+function piVerb(command: string): string | null {
+  if (SHELL_METACHARACTERS.test(command)) return null;
+
+  const words = command.trim().split(/\s+/);
+  let at = 0;
+
+  if (words[0] === "node") {
+    // Run from a checkout: `node cli/pi.ts <verb>`, path or not.
+    if (!words[1]?.endsWith("pi.ts")) return null;
+    at = 2;
+  } else if (words[0] === "pi" || words[0]?.endsWith("/pi")) {
+    at = 1;
+  } else {
+    return null;
+  }
+
+  // `pi engine next` is the same verb as `pi next`.
+  if (words[at] === "engine") at += 1;
+
+  return words[at] ?? null;
+}
+
+function commandOf(input: CursorInput): string | null {
+  const command = (input.tool_input ?? {}).command;
+  return typeof command === "string" && command.trim() !== "" ? command : null;
 }
 
 function isArtifact(file: string, workspace: Workspace): boolean {
@@ -105,42 +175,92 @@ function countLines(value: unknown): number {
   return typeof value === "string" && value !== "" ? value.split("\n").length : 0;
 }
 
+
+function textOf(value: unknown): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+/**
+ * How many lines differ between two versions of a file.
+ *
+ * Line multisets rather than a real diff: for a budget, a moved line is not a
+ * changed line, and an exact LCS buys precision nobody spends.
+ */
+function changedLines(before: string, after: string): number {
+  const counts = new Map<string, number>();
+  for (const line of before.split("\n")) counts.set(line, (counts.get(line) ?? 0) + 1);
+  let added = 0;
+  for (const line of after.split("\n")) {
+    const seen = counts.get(line) ?? 0;
+    if (seen > 0) counts.set(line, seen - 1);
+    else added++;
+  }
+  let removed = 0;
+  for (const remaining of counts.values()) removed += remaining;
+  return Math.max(added, removed);
+}
 /**
  * How many lines this call would touch.
  *
- * For an edit we take the larger of the old and new text rather than their sum:
- * rewriting twenty lines as twenty-two is a twenty-two line change, not a
- * forty-two line one, and inflating it would spend budgets the reviewer never
- * sees the benefit of.
+ * Cursor applies an edit as a whole-file write, so `tool_input` carries the
+ * resulting file and not the edit. Measuring what it sends charges a two-line
+ * change for every line in the file, which empties a budget in one call. So
+ * compare against what is on disk: `preToolUse` runs before the write, and the
+ * difference is the size of the actual edit.
  */
-function linesOf(toolInput: Record<string, unknown>): number {
-  const direct = Math.max(
-    countLines(toolInput.contents ?? toolInput.content),
-    countLines(toolInput.new_string),
-    countLines(toolInput.old_string),
-  );
-
+function linesOf(toolInput: Record<string, unknown>, file: string | undefined): number {
   const edits = toolInput.edits;
-  if (!Array.isArray(edits)) return direct;
-
-  return edits.reduce((total: number, raw) => {
-    const edit = (raw ?? {}) as Record<string, unknown>;
-    return total + Math.max(countLines(edit.new_string), countLines(edit.old_string));
-  }, direct);
+  if (Array.isArray(edits) && edits.length > 0) {
+    return edits.reduce((total: number, raw) => {
+      const edit = (raw ?? {}) as Record<string, unknown>;
+      return total + Math.max(countLines(edit.new_string), countLines(edit.old_string));
+    }, 0);
+  }
+  const editText = Math.max(countLines(toolInput.new_string), countLines(toolInput.old_string));
+  if (editText > 0) return editText;
+  const whole = textOf(toolInput.contents) ?? textOf(toolInput.content);
+  if (whole === null) return 0;
+  // A new file is all of itself; an edit to an existing one is only what it changes.
+  if (!file || !existsSync(file)) return countLines(whole);
+  try {
+    return changedLines(readFileSync(file, "utf-8"), whole);
+  } catch {
+    return countLines(whole);
+  }
 }
+
 
 function toolCallOf(input: CursorInput, workspace: Workspace): ToolCall | null {
   const toolInput = input.tool_input ?? {};
   const files = filesOf(toolInput);
   const tool = mapTool(input, files, workspace);
 
-  return tool === null ? null : { tool, files, lines: linesOf(toolInput) };
+  return tool === null ? null : { tool, files, lines: linesOf(toolInput, files[0]) };
 }
 
 // ── Targets ─────────────────────────────────────────────────────────────────
 
+/**
+ * Which project this event is about.
+ *
+ * A multi-root workspace sends every root, in no particular order, and some
+ * events carry no `cwd` at all. Taking the first root is wrong whenever the run
+ * lives in another one: the guard waves every call through, and — worse —
+ * `beforeSubmitPrompt` records the human turn against a project with no run, so
+ * it is dropped and no gate can ever be cleared. Both failures are silent.
+ *
+ * So prefer whichever candidate actually has a run.
+ */
 function projectDirOf(input: CursorInput): string {
-  return input.cwd ?? input.workspace_roots?.[0] ?? process.cwd();
+  const candidates = [input.cwd, ...(input.workspace_roots ?? [])].filter(
+    (dir): dir is string => typeof dir === "string" && dir !== "",
+  );
+
+  for (const dir of candidates) {
+    if (activeRunId(dir)) return dir;
+  }
+
+  return candidates[0] ?? process.cwd();
 }
 
 function guard(input: CursorInput): string {
@@ -149,6 +269,24 @@ function guard(input: CursorInput): string {
 
   // No run means pi is not governing this session. Stay out of the way.
   if (!runId) return ALLOW;
+
+  // pi's own control plane, answered before the guard: see CONTROL_VERBS.
+  const command = commandOf(input);
+  if (command !== null) {
+    const verb = piVerb(command);
+
+    if (verb === HUMAN_TURN) {
+      return JSON.stringify({
+        permission: Permission.Deny,
+        agent_message:
+          "`pi human-turn` records that a person was present, which is what an " +
+          "approval rests on. It is not yours to run. If a gate is waiting, show " +
+          "the human what you have done and end your turn.",
+      });
+    }
+
+    if (verb !== null && CONTROL_VERBS.has(verb)) return ALLOW;
+  }
 
   const workspace = openWorkspace(projectDir);
   const call = toolCallOf(input, workspace);
@@ -232,39 +370,29 @@ function sessionStart(input: CursorInput): string {
   return JSON.stringify({ additional_context: lines.join(" ") });
 }
 
-/**
- * Cursor's stop hook cannot refuse a stop, so an unfinished run surfaces as a
- * nudge rather than a block. Advisory by design, and honest about it.
- */
-function stop(input: CursorInput): string {
-  const projectDir = projectDirOf(input);
-  const runId = activeRunId(projectDir);
-  if (!runId) return "";
-
-  const state = createStateStore(runPaths(projectDir, runId)).read();
-  if (state.status !== "active" || state.currentStep === null) return "";
-
-  const stepState = state.steps[state.currentStep];
-  if (!stepState) return "";
-
-  if (stepState.status === StepStatus.AwaitingReview) {
-    return JSON.stringify({
-      followup_message:
-        `Step "${state.currentStep}" is waiting on your review. ` +
-        `Run \`pi review status\` to see it.`,
-    });
-  }
-
-  if (stepState.status === StepStatus.AwaitingApproval) {
-    return JSON.stringify({
-      followup_message:
-        `Step "${state.currentStep}" is done and waiting for your approval. ` +
-        `Run \`pi next\` to see it.`,
-    });
-  }
-
-  return "";
-}
+// ── There is deliberately no `stop` target ──────────────────────────────────
+//
+// It is tempting to nudge from `stop` when a run is left waiting at a gate.
+// Do not. The only channel `stop` has is `followup_message`, and Cursor submits
+// that as the next user message — which fires `beforeSubmitPrompt`, which is
+// where `humanTurn` records that a person was present.
+//
+// So the nudge minted the very evidence a gate rests on. pi generated a string,
+// Cursor handed it back, and pi recorded it as a human. Measured across two
+// runs: every gate resolved from chat had a human turn 9 to 15 seconds after it
+// opened, while gates resolved from a terminal had theirs minutes apart. That
+// made `hasHumanPresence` self-satisfying and the claim that an unattended run
+// cannot approve its own work false.
+//
+// The payload gives no way to tell the two apart: `beforeSubmitPrompt` receives
+// only `{ prompt, attachments }` and the fields every hook gets. No `source`,
+// no `is_followup`. `loop_count` exists, but on the `stop` payload — the wrong
+// side of the loop.
+//
+// The second reason stands on its own: a gate exists to END the agent's turn.
+// A followup auto-continues it at exactly the moment it must stop, so the hook
+// was fighting the gate it reported on. A waiting gate surfaces through the
+// agent's closing message and `pi status` instead.
 
 // ── Entry ───────────────────────────────────────────────────────────────────
 
@@ -273,7 +401,6 @@ const TARGETS: Record<string, (input: CursorInput) => string> = {
   record,
   "human-turn": humanTurn,
   "session-start": sessionStart,
-  stop,
 };
 
 async function readStdin(): Promise<string> {

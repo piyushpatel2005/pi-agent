@@ -94,7 +94,9 @@ function cursorHooks(): Record<string, { command: string }[]> {
     beforeSubmitPrompt: [run("human-turn")],
     preToolUse: [run("guard")],
     postToolUse: [run("record")],
-    stop: [run("stop")],
+    // No `stop`: its only channel is `followup_message`, which Cursor submits
+    // as a user message and which therefore mints the human presence gates
+    // rest on. See the note in harness/cursor/adapter.ts.
   };
 }
 

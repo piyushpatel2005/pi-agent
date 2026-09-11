@@ -37,13 +37,12 @@ The tool must call out before and after tool calls. For Cursor that is
     "preToolUse":         [{ "command": "node \"/abs/path/adapter.ts\" guard" }],
     "postToolUse":        [{ "command": "node \"/abs/path/adapter.ts\" record" }],
     "beforeSubmitPrompt": [{ "command": "node \"/abs/path/adapter.ts\" human-turn" }],
-    "sessionStart":       [{ "command": "node \"/abs/path/adapter.ts\" session-start" }],
-    "stop":               [{ "command": "node \"/abs/path/adapter.ts\" stop" }]
+    "sessionStart":       [{ "command": "node \"/abs/path/adapter.ts\" session-start" }]
   }
 }
 ```
 
-Five events, and their jobs:
+Four events, and their jobs:
 
 | Event | Target | Why it matters |
 | --- | --- | --- |
@@ -51,7 +50,18 @@ Five events, and their jobs:
 | after a tool call | `record` | Keeps the change tally honest |
 | on a human prompt | `human-turn` | The evidence gates rest on |
 | session start | `session-start` | Tells a new session where the run stands |
-| session end | `stop` | Nudges when a run is left waiting |
+
+**Do not wire your harness's end-of-turn hook.** If it can only reply with a
+message that gets submitted as the user's next turn — Cursor's `stop` hook and
+its `followup_message` are the example — then nudging from it makes the harness
+mint the human presence that gates depend on, and the payload on the receiving
+side has no way to tell that message apart from something a person typed.
+
+pi used to wire it, and every gate resolved from chat was cleared on presence pi
+had generated for itself about ten seconds earlier. It is also the wrong moment
+to speak: a gate exists to end the agent's turn, and a followup continues it.
+A waiting gate should surface through the agent's own closing message and
+`pi status`.
 
 **`guard` and `human-turn` are the two that are load-bearing.** Without `guard`
 nothing is enforced. Without `human-turn` no gate can ever be cleared, because
