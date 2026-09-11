@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative } from "node:path";
 
+import { applyIgnore, revokeIgnore, tracked } from "./gitignore.ts";
 import { CONFIG_FILE } from "./workspace.ts";
 
 /** The root of the pi installation, resolved from this file. */
@@ -56,9 +57,21 @@ export function requireHarness(harness: string): void {
   }
 }
 
-export function install(projectDir: string, harness: string): InstallResult {
+export type InstallOptions = {
+  /**
+   * Skip the `.gitignore` block. For a project that has decided to commit its
+   * pi config rather than keep it local.
+   */
+  noGitignore?: boolean;
+};
+
+export function install(
+  projectDir: string,
+  harness: string,
+  options: InstallOptions = {},
+): InstallResult {
   requireHarness(harness);
-  return installCursor(projectDir);
+  return installCursor(projectDir, options);
 }
 
 // ── Cursor ──────────────────────────────────────────────────────────────────
@@ -85,7 +98,7 @@ function cursorHooks(): Record<string, { command: string }[]> {
   };
 }
 
-function installCursor(projectDir: string): InstallResult {
+function installCursor(projectDir: string, options: InstallOptions): InstallResult {
   const written: string[] = [];
   const notes: string[] = [];
   const cursorDir = join(projectDir, ".cursor");
@@ -96,8 +109,10 @@ function installCursor(projectDir: string): InstallResult {
     );
   }
 
-  mergeHooks(join(cursorDir, "hooks.json"), cursorHooks(), written, notes);
-  mergePermissions(join(cursorDir, "cli.json"), written, notes);
+  // Whether pi *created* these, as opposed to merging into a project's own.
+  // It decides whether pi may put them in .gitignore below.
+  const madeHooks = mergeHooks(join(cursorDir, "hooks.json"), cursorHooks(), written, notes);
+  const madeCli = mergePermissions(join(cursorDir, "cli.json"), written, notes);
 
   copyInto(
     join(PI_ROOT, "harness", "cursor", "skills", "pi", "SKILL.md"),
@@ -112,19 +127,63 @@ function installCursor(projectDir: string): InstallResult {
     written,
   );
 
+  if (!options.noGitignore) {
+    const extra: string[] = [];
+    if (madeHooks) extra.push("/.cursor/hooks.json");
+    if (madeCli) extra.push("/.cursor/cli.json");
+
+    const ignored = applyIgnore(projectDir, extra);
+    if (ignored.wrote) written.push(ignored.wrote);
+    notes.push(...ignored.notes);
+
+    warnAboutTrackedFiles(projectDir, madeHooks, madeCli, notes);
+  }
+
   return { written, notes };
+}
+
+/**
+ * Say so when pi merged into a file the project already commits.
+ *
+ * `.gitignore` does nothing for a tracked file, so an ignore rule here would be
+ * a rule that silently fails. The honest move is to name the file and let the
+ * user decide.
+ */
+function warnAboutTrackedFiles(
+  projectDir: string,
+  madeHooks: boolean,
+  madeCli: boolean,
+  notes: string[],
+): void {
+  const shared: string[] = [];
+  if (!madeHooks) shared.push(".cursor/hooks.json");
+  if (!madeCli) shared.push(".cursor/cli.json");
+
+  const committed = tracked(projectDir, shared);
+  if (committed.length === 0) return;
+
+  const one = committed.length === 1;
+
+  notes.push(
+    `${committed.join(" and ")} ${one ? "is" : "are"} already tracked by git, and pi merged ` +
+      `into ${one ? "it" : "them"}. That edit will show up in your next commit, and ` +
+      "`.gitignore` cannot hide a file git already follows. Run `pi uninstall` and then " +
+      `\`git checkout -- ${committed.join(" ")}\` if you would rather it never appeared.`,
+  );
 }
 
 // ── Merging ─────────────────────────────────────────────────────────────────
 
 type HookEntry = { command: string };
 
+/** Returns true when pi created the file, rather than merging into one. */
 function mergeHooks(
   path: string,
   ours: Record<string, HookEntry[]>,
   written: string[],
   notes: string[],
-): void {
+): boolean {
+  const isOurFile = !existsSync(path);
   const existing = readJson(path);
   const hooks: Record<string, HookEntry[]> =
     (existing?.hooks as Record<string, HookEntry[]>) ?? {};
@@ -150,6 +209,8 @@ function mergeHooks(
   written.push(".cursor/hooks.json");
 
   if (replaced > 0) notes.push(`Replaced ${replaced} stale pi hook(s) from a previous install.`);
+
+  return isOurFile;
 }
 
 /** Is this hook entry one pi wrote? Matched on the adapter path it invokes. */
@@ -164,7 +225,8 @@ function isOurs(entry: HookEntry): boolean {
  * call. Nothing else is touched: widening a project's permissions beyond what
  * pi needs is not the installer's business.
  */
-function mergePermissions(path: string, written: string[], notes: string[]): void {
+function mergePermissions(path: string, written: string[], notes: string[]): boolean {
+  const isOurFile = !existsSync(path);
   const existing = readJson(path) ?? {};
   const permissions = (existing.permissions as Record<string, unknown>) ?? {};
   const allow = Array.isArray(permissions.allow) ? (permissions.allow as string[]) : [];
@@ -172,7 +234,7 @@ function mergePermissions(path: string, written: string[], notes: string[]): voi
   const grant = "Shell(pi)";
   if (allow.includes(grant)) {
     notes.push(`${grant} was already allowed.`);
-    return;
+    return isOurFile;
   }
 
   writeJson(path, {
@@ -180,6 +242,8 @@ function mergePermissions(path: string, written: string[], notes: string[]): voi
     permissions: { ...permissions, allow: [...allow, grant] },
   });
   written.push(".cursor/cli.json");
+
+  return isOurFile;
 }
 
 function copyInto(source: string, target: string, projectDir: string, written: string[]): void {
@@ -256,11 +320,23 @@ export function uninstall(
   );
 
   if (options.purge) purgeProject(projectDir, removed, notes);
-  else if (existsSync(join(projectDir, "pi")) || existsSync(join(projectDir, CONFIG_FILE))) {
+
+  const left = [CONFIG_FILE, "pi/"].filter((path) =>
+    existsSync(join(projectDir, path.replace(/\/$/, ""))),
+  );
+
+  if (left.length === 0) {
+    const unignored = revokeIgnore(projectDir);
+    if (unignored) removed.push(unignored);
+  } else {
+    // The ignore block outlives the install on purpose: these files are still
+    // sitting in the project, and un-ignoring them now is how they end up in
+    // somebody's commit.
     notes.push(
-      `Left ${CONFIG_FILE} and pi/ alone: your config, workflows, and run ` +
-        "history live there. Use --purge to delete those too.",
+      `Left ${left.join(" and ")} alone: your config, workflows, and run history ` +
+        "live there. Use --purge to delete those too.",
     );
+    notes.push("Kept pi's .gitignore block, so what is left stays out of your commits.");
   }
 
   return { removed, notes };

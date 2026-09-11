@@ -18,6 +18,7 @@ import {
   requireHarness,
   uninstall,
 } from "../core/engine/install.ts";
+import { applyIgnore } from "../core/engine/gitignore.ts";
 import {
   Permission,
   denialEvent,
@@ -147,6 +148,14 @@ function cmdInit(projectDir: string, args: Args): number {
   mkdirSync(join(projectDir, "pi", "workflows"), { recursive: true });
 
   console.log(`Wrote ${CONFIG_FILE} and pi/workflows/.`);
+
+  // Both files just appeared in someone's `git status`. Ignore them now rather
+  // than at `pi install`, which may not be the next thing they run.
+  if (args.flags.get("no-gitignore") !== true) {
+    const ignored = applyIgnore(projectDir, []);
+    if (ignored.wrote) console.log(`Wrote ${ignored.wrote}.`);
+  }
+
   console.log("");
   console.log("Next:");
   console.log(`  1. Edit ${CONFIG_FILE} — the "facts" decide which steps apply to this project.`);
@@ -194,7 +203,8 @@ function cmdRuns(workspace: Workspace, args: Args): number {
 
 function cmdInstall(workspace: Workspace, args: Args): number {
   const harness = flagString(args, "harness") ?? workspace.config.harness;
-  const result = install(workspace.projectDir, harness);
+  const noGitignore = args.flags.get("no-gitignore") === true;
+  const result = install(workspace.projectDir, harness, { noGitignore });
 
   console.log(`Wired pi into ${harness}:`);
   for (const file of result.written) console.log(`  ${file}`);
@@ -1156,8 +1166,8 @@ function renderDirective(directive: Directive): void {
 const USAGE = `pi — a workflow harness for coding agents
 
 Usage
-  pi init [--harness <name>] [--force]     scaffold pi.config.json in this project
-  pi install [--harness <name>]            wire pi into your coding tool's hooks
+  pi init [--force] [--no-gitignore]       scaffold pi.config.json in this project
+  pi install [--no-gitignore]              wire pi into your coding tool's hooks
   pi uninstall [--purge]                   take pi back out; --purge drops config+history
   pi start "<goal>" [--workflow <id>]      begin a run
   pi runs [--use <id>] [--json]            list runs, or switch to one

@@ -36,6 +36,12 @@ so when it does.
   alone. Files and directories left empty by the removal — `hooks.json`,
   `cli.json`, `.cursor/skills/`, `.cursor/rules/`, and `.cursor/` itself — are
   deleted rather than left as husks.
+- `pi init` and `pi install` now add a marked block to the project's
+  `.gitignore` so nothing pi writes turns up in someone's commit. `.cursor/`
+  files pi merged into rather than created are left out of the block and
+  reported instead, since `.gitignore` cannot hide a tracked file. Pass
+  `--no-gitignore` to skip it. `pi uninstall` removes the block once there is
+  nothing left to ignore.
 - `pi uninstall --purge` additionally deletes `pi.config.json` and `pi/`,
   reporting how many runs of history it is discarding. It works on a project
   that has already been unwired.

@@ -104,6 +104,28 @@ Then start a run:
 pi start "Add an orders service with a REST API"
 ```
 
+### Driving it from Cursor
+
+`pi install` puts a skill at `.cursor/skills/pi/SKILL.md`, which Cursor picks up
+two ways:
+
+- **Type `/pi` in the chat**, and the skill attaches to that message.
+- **Say what you want in plain language** — "start a pi run for the orders
+  service", or anything at all once a run is active. The skill's description
+  tells the agent when it is relevant, and the agent reaches for it on its own.
+
+Either way the agent then drives the same loop you would by hand: `pi next
+--brief` for the step, do the work, `pi report`. You stay in the chat; the
+engine decides the routing.
+
+The `.cursor/rules/pi.mdc` rule is `alwaysApply: true`, so the ground rules —
+never report completion over failing tests, follow a guard refusal rather than
+working around it — are in context whether or not the skill was invoked.
+
+Restart Cursor after `pi install` so it discovers both.
+
+### Or by hand
+
 From here the loop is three commands. Ask what to do, do it, say what happened:
 
 ```bash
@@ -348,16 +370,90 @@ so persona files stay about the role.
 }
 ```
 
-- **`facts`** — the closed set of booleans that workflow `when` conditions
-  resolve against. A step whose condition is false is marked skipped at the
-  start of the run, so you can see up front what won't happen.
-- **`docs`** — where documentation belongs in this repo. Implementation steps
-  carry a generated instruction pointing at `dir` and `files`, and a
-  `docs-coverage` sensor flags code changes that arrived without them.
-  Everything matching `exempt` is excused.
-- **`changeBudget`** — an optional project-wide default that steps inherit.
-- **`checks`** — the commands the `type-check` and `linter` sensors run. Omit
-  one and that sensor skips; pi does not guess at your build tooling.
+Every key has a working default, so a repo with no `pi.config.json` at all
+still runs. The file exists to say the things only your repo knows.
+
+| Key | Default | What it does |
+| --- | --- | --- |
+| `version` | `1` | Config schema version. Bumped only by a migration |
+| `harness` | `"cursor"` | Which coding tool this project is wired for |
+| `defaultWorkflow` | `"feature"` | Used when `pi start` gets no `--workflow` |
+| `facts` | `{}` | Booleans that workflow `when` conditions resolve against |
+| `docs.dir` | `"docs"` | Directory holding long-form documentation |
+| `docs.files` | `["README.md"]` | Documentation files outside `dir` |
+| `docs.required` | `true` | Whether a step that changed source owes a doc update |
+| `docs.exempt` | `["tests/", "test/", "**/*.test.*", "dist/"]` | Paths that never owe one |
+| `changeBudget.maxFiles` | unset | Project-wide ceiling on files per step |
+| `changeBudget.maxLines` | unset | Project-wide ceiling on lines per step |
+| `checks.typeCheck` | unset | Command the `type-check` sensor runs |
+| `checks.lint` | unset | Command the `linter` sensor runs |
+
+**`facts`** is a closed set, not free-form. A workflow author can say "only when
+there is a frontend" but cannot embed logic the engine is unable to explain back
+to you. The four:
+
+| Fact | Meaning |
+| --- | --- |
+| `hasFrontend` | The change has a user interface |
+| `hasBackend` | The change has server-side work |
+| `needsInfra` | Deployment or infrastructure work is in scope |
+| `isBrownfield` | Existing code, not a greenfield start |
+
+A step whose condition is false is marked skipped at the start of the run, so
+you see up front what won't happen. **A fact you leave out counts as false**, so
+an empty `facts` block silently skips every conditional step — `pi status` after
+`pi start` is worth a look.
+
+**`docs`** is configuration rather than persona prose on purpose. "Update the
+docs" written into an agent's instructions is unenforceable and drifts per repo.
+Declared here it becomes one generated sentence in the agent's brief, one
+`docs-coverage` sensor reading after the step, and one place to change when a
+repo keeps its docs in `website/content`.
+
+**`changeBudget`** is inherited by every step; a step's own budget still wins
+when it is stricter.
+
+**`checks`** commands are skipped rather than guessed at when absent. A sensor
+that silently checked nothing would report green for the wrong reason.
+
+### Keeping pi out of your commits
+
+`pi init` and `pi install` add a marked block to your `.gitignore`:
+
+```
+# >>> pi >>>
+# Written by `pi install`, removed by `pi uninstall`.
+# Delete this block by hand once the team decides to commit pi's config.
+/pi/
+/pi.config.json
+/.cursor/skills/pi/
+/.cursor/rules/pi.mdc
+/.cursor/hooks.json
+/.cursor/cli.json
+# <<< pi <<<
+```
+
+The point is that nobody reviewing your pull request asked to also review your
+run history. After installing pi and running work through it, `git status`
+should show nothing but `.gitignore` itself.
+
+Two details worth knowing:
+
+`.cursor/hooks.json` and `.cursor/cli.json` are only listed when **pi created
+them**. If your project already had either, the file is yours and pi will not
+hide it — pi merged into it and says so instead. `.gitignore` has no effect on
+a file git already tracks, so an entry there would be a rule that silently does
+nothing.
+
+`pi uninstall` removes the block, but only once there is nothing left to ignore.
+While `pi.config.json` and `pi/` are still on disk the block stays, because
+un-ignoring them is exactly how they end up in someone's commit. `pi uninstall
+--purge` removes the files and the block together, and deletes `.gitignore` if
+pi's block was all it held.
+
+Pass `--no-gitignore` to either command to skip all of this — for when the team
+has decided to commit `pi.config.json`, which is the eventual intent: it is a
+description of your repo, and it is more useful shared than local.
 
 ## Workflows
 
