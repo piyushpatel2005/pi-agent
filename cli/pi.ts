@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 import { renderBrief, requireAgent } from "../core/engine/agents.ts";
 import { createEventLog } from "../core/engine/event-log.ts";
+import { InstallError, install, isInstalled } from "../core/engine/install.ts";
 import {
   Permission,
   denialEvent,
@@ -129,6 +130,20 @@ function cmdInit(projectDir: string, args: Args): number {
   console.log("Next:");
   console.log(`  1. Edit ${CONFIG_FILE} — the "facts" decide which steps apply to this project.`);
   console.log('  2. Run `pi start "what you want to build"`.');
+  return 0;
+}
+
+function cmdInstall(workspace: Workspace, args: Args): number {
+  const harness = flagString(args, "harness") ?? workspace.config.harness;
+  const result = install(workspace.projectDir, harness);
+
+  console.log(`Wired pi into ${harness}:`);
+  for (const file of result.written) console.log(`  ${file}`);
+  for (const note of result.notes) console.log(`\n  note: ${note}`);
+
+  console.log("");
+  console.log("Restart Cursor so it picks up the hooks, then:");
+  console.log('  pi start "<what you want to build>"');
   return 0;
 }
 
@@ -691,6 +706,13 @@ function cmdDoctor(workspace: Workspace): number {
     ? ok(`${CONFIG_FILE} present`)
     : console.log(`warn  no ${CONFIG_FILE}; using defaults (run \`pi init\`)`);
 
+  isInstalled(workspace.projectDir, workspace.config.harness)
+    ? ok(`wired into ${workspace.config.harness}`)
+    : console.log(
+        `warn  not wired into ${workspace.config.harness}; guards will not run ` +
+          `automatically (run \`pi install\`)`,
+      );
+
   workspace.roster.agents.size > 0
     ? ok(`${workspace.roster.agents.size} persona(s) loaded`)
     : bad("no personas loaded");
@@ -800,6 +822,7 @@ const USAGE = `pi — a workflow harness for coding agents
 
 Usage
   pi init [--harness <name>] [--force]     scaffold pi.config.json in this project
+  pi install [--harness <name>]            wire pi into your coding tool's hooks
   pi start "<goal>" [--workflow <id>]      begin a run
   pi status [--json]                       where the active run is
   pi next [--brief] [--json]               what to do now; --brief for the full prompt
@@ -844,6 +867,8 @@ function main(argv: string[]): number {
   const workspace = openWorkspace(projectDir);
 
   switch (verb) {
+    case "install":
+      return cmdInstall(workspace, args);
     case "start":
       return cmdStart(workspace, args);
     case "next":
@@ -881,7 +906,8 @@ try {
   if (
     cause instanceof WorkspaceError ||
     cause instanceof RouterError ||
-    cause instanceof ReviewError
+    cause instanceof ReviewError ||
+    cause instanceof InstallError
   ) {
     // Expected, explainable failures: say the one useful sentence, not a stack.
     console.error(cause.message);

@@ -61,10 +61,15 @@ In the project you want to work on:
 ```bash
 cd ~/code/my-project
 pi init
+pi install     # wire pi into Cursor's hooks, then restart Cursor
 ```
 
-That writes `pi.config.json` and a `pi/workflows/` directory. Open the config and
-set the **facts** — they decide which steps apply to your project:
+`pi init` writes `pi.config.json` and a `pi/workflows/` directory. `pi install`
+wires the guard into your coding tool — without it, `pi` still routes and
+records, but nothing consults the guard, so budgets are advice again.
+
+Open the config and set the **facts** — they decide which steps apply to your
+project:
 
 ```json
 {
@@ -113,6 +118,7 @@ pi log         # everything that has happened
 | Command | What it does |
 | --- | --- |
 | `pi init` | Scaffold `pi.config.json` and `pi/workflows/` |
+| `pi install` | Wire pi into your coding tool's hooks |
 | `pi start "<goal>"` | Begin a run; `--workflow <id>` picks a non-default one |
 | `pi next` | The one thing to do now; `--json` for machine use |
 | `pi report --step <id> --result <r>` | Record an outcome |
@@ -316,6 +322,43 @@ names a persona that does not exist, grants a persona a tool it does not hold,
 or wires a conditional producer into an unconditional consumer. Run `pi doctor`
 to see what failed and why.
 
+## The harness layer
+
+`pi` is not the agent. Your coding tool owns the model and the tool loop; `pi`
+supplies routing, guards, state, and the audit trail around it. The harness
+layer is the seam between them, and it is deliberately thin — three things:
+
+1. **Hooks** pointed at `harness/cursor/adapter.ts`, which translates the host's
+   tool calls into pi's vocabulary and answers allow or deny.
+2. **A skill** (`.cursor/skills/pi/SKILL.md`) telling the agent how to drive the
+   `next` / work / `report` loop.
+3. **A permission** so running `pi` doesn't prompt on every call.
+
+`pi install` writes all three, merging into your existing `.cursor/` config
+rather than replacing it. Reinstalling is safe and idempotent; it also cleans up
+hooks left pointing at a previous pi location.
+
+What gets wired, by Cursor event:
+
+| Event | What pi does |
+| --- | --- |
+| `sessionStart` | Tells a fresh session which run is active and where it stands |
+| `beforeSubmitPrompt` | Mints the human turn that gates depend on |
+| `preToolUse` | The guard: allow or deny, with a reason |
+| `postToolUse` | Records what was actually changed, for the tally |
+| `stop` | Nudges when a review or approval is outstanding |
+
+Two honest caveats:
+
+- **The guard fails open.** Any internal error allows the call. A guard that
+  bricks your editor when pi has a bug is worse than one that occasionally
+  misses a write, and the review gates still catch the work before it lands.
+- **`stop` cannot block.** Cursor's stop hook has no decision channel, so an
+  unfinished run surfaces as a follow-up nudge, not a refusal.
+
+Porting to another tool means writing those three things for it and nothing
+else — the engine, personas, and workflows are host-neutral.
+
 ## Where a run lives
 
 ```
@@ -343,11 +386,9 @@ strip types and run the source directly.
 
 ## Status
 
-Early, but the core works end to end: the engine, workflows, personas, the
-guard, review receipts, and the CLI.
+Early, but usable end to end on Cursor: the engine, workflows, personas, the
+guard, review receipts, the CLI, and the Cursor harness.
 
-Still to come: the Cursor harness projection, which wires `pi guard` to Cursor's
-pre-tool-use hook. Until then the guard is enforced only when something calls
-it — `pi guard --tool ...` works today and the tests drive it, but a coding
-agent won't consult it on its own yet. The sensors and `pi rewind` are also
-outstanding.
+Still to come: the sensors (`docs-coverage`, `type-check`, `linter` are declared
+by workflows but not yet run), `pi rewind` to a checkpoint, and harnesses for
+Claude Code and Copilot.
