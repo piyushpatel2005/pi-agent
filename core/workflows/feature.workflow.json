@@ -1,0 +1,94 @@
+{
+  "id": "feature",
+  "name": "Feature delivery",
+  "version": 1,
+  "description": "Requirements through design, implementation, tests, and validation.",
+  "defaults": {
+    "gate": "approval",
+    "checkpoint": true
+  },
+  "steps": [
+    {
+      "id": "requirements",
+      "agent": "business-analyst",
+      "objective": "Capture what this feature must do and how we will know it works.",
+      "produces": ["requirements.md", "acceptance-criteria.md"],
+      "tools": ["read", "search", "ask-user", "write-artifact"],
+      "sensors": ["required-sections"]
+    },
+    {
+      "id": "architecture",
+      "agent": "solution-architect",
+      "objective": "Decide the shape of the solution and the contracts between its parts.",
+      "consumes": ["requirements.md"],
+      "produces": ["architecture.md", "api-contract.md"],
+      "tools": ["read", "search", "write-artifact"],
+      "sensors": ["required-sections", "upstream-coverage"]
+    },
+    {
+      "id": "ux-design",
+      "agent": "ui-designer",
+      "objective": "Design the screens and flows this feature needs.",
+      "when": ["hasFrontend"],
+      "consumes": ["requirements.md"],
+      "produces": ["ux-design.md"],
+      "tools": ["read", "write-artifact"],
+      "sensors": ["required-sections"]
+    },
+    {
+      "id": "backend-implementation",
+      "agent": "backend-developer",
+      "objective": "Implement the services and data model behind the contract.",
+      "when": ["hasBackend"],
+      "consumes": ["architecture.md", "api-contract.md"],
+      "produces": ["backend-summary.md"],
+      "tools": ["read", "search", "write-code", "write-artifact", "run-command", "request-review"],
+      "changeBudget": { "maxFiles": 8, "maxLines": 300 },
+      "requireReviewBefore": ["write-code"],
+      "sensors": ["type-check", "linter", "docs-coverage"]
+    },
+    {
+      "id": "frontend-implementation",
+      "agent": "frontend-developer",
+      "objective": "Build the screens against the approved contract and design.",
+      "when": ["hasFrontend"],
+      "consumes": ["api-contract.md", "ux-design.md"],
+      "produces": ["frontend-summary.md"],
+      "tools": ["read", "search", "write-code", "write-artifact", "run-command", "request-review"],
+      "changeBudget": { "maxFiles": 8, "maxLines": 300 },
+      "requireReviewBefore": ["write-code"],
+      "sensors": ["type-check", "linter", "docs-coverage"]
+    },
+    {
+      "id": "tests",
+      "agent": "qa-engineer",
+      "objective": "Write the unit, integration, and end-to-end tests that prove the acceptance criteria.",
+      "consumes": ["acceptance-criteria.md"],
+      "produces": ["test-plan.md", "test-results.md"],
+      "tools": ["read", "search", "write-code", "write-artifact", "run-command", "request-review"],
+      "changeBudget": { "maxFiles": 12, "maxLines": 500 },
+      "sensors": ["type-check", "linter"]
+    },
+    {
+      "id": "infrastructure",
+      "agent": "devops-engineer",
+      "objective": "Provision what this feature needs to run, and wire it into CI/CD.",
+      "when": ["needsInfra"],
+      "consumes": ["architecture.md"],
+      "produces": ["infrastructure.md", "pipeline.md"],
+      "tools": ["read", "write-code", "write-artifact", "run-command", "request-review"],
+      "changeBudget": { "maxFiles": 6, "maxLines": 250 },
+      "requireReviewBefore": ["write-code"],
+      "sensors": ["docs-coverage"]
+    },
+    {
+      "id": "validation",
+      "agent": "business-analyst",
+      "objective": "Confirm every acceptance criterion is met, and say which are not.",
+      "consumes": ["acceptance-criteria.md", "test-results.md"],
+      "produces": ["validation.md"],
+      "tools": ["read", "search", "run-command", "write-artifact"],
+      "sensors": ["traceability"]
+    }
+  ]
+}

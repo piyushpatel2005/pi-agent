@@ -7,6 +7,14 @@
   "engines": {
     "node": ">=22.18"
   },
+  "bin": {
+    "pi": "./cli/pi.ts"
+  },
+  "files": [
+    "cli",
+    "core",
+    "README.md"
+  ],
   "scripts": {
     "test": "node --test",
     "typecheck": "tsc --noEmit"

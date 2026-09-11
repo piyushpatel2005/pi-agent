@@ -1,0 +1,42 @@
+{
+  "id": "quick",
+  "name": "Quick change",
+  "version": 1,
+  "description": "The short path when the requirements are already clear: implement, test, done.",
+  "defaults": {
+    "gate": "approval",
+    "checkpoint": true
+  },
+  "steps": [
+    {
+      "id": "requirements",
+      "agent": "business-analyst",
+      "objective": "Write down what to build and how we will know it works.",
+      "produces": ["requirements.md", "acceptance-criteria.md"],
+      "tools": ["read", "search", "ask-user", "write-artifact"],
+      "gate": "none",
+      "sensors": ["required-sections"]
+    },
+    {
+      "id": "implementation",
+      "agent": "backend-developer",
+      "objective": "Make the change.",
+      "consumes": ["requirements.md"],
+      "produces": ["implementation-summary.md"],
+      "tools": ["read", "search", "write-code", "write-artifact", "run-command", "request-review"],
+      "changeBudget": { "maxFiles": 6, "maxLines": 200 },
+      "requireReviewBefore": ["write-code"],
+      "sensors": ["type-check", "linter", "docs-coverage"]
+    },
+    {
+      "id": "tests",
+      "agent": "qa-engineer",
+      "objective": "Cover the change with tests and run them.",
+      "consumes": ["acceptance-criteria.md"],
+      "produces": ["test-results.md"],
+      "tools": ["read", "write-code", "run-command", "write-artifact"],
+      "changeBudget": { "maxFiles": 8, "maxLines": 300 },
+      "sensors": ["type-check", "linter"]
+    }
+  ]
+}

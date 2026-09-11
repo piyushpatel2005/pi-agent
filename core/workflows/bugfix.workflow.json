@@ -1,0 +1,49 @@
+{
+  "id": "bugfix",
+  "name": "Bug fix",
+  "version": 1,
+  "description": "Reproduce it, fix it, and leave a regression test behind.",
+  "defaults": {
+    "gate": "approval",
+    "checkpoint": true
+  },
+  "steps": [
+    {
+      "id": "reproduce",
+      "agent": "qa-engineer",
+      "objective": "Reproduce the defect and capture the exact failing behavior.",
+      "produces": ["reproduction.md"],
+      "tools": ["read", "search", "run-command", "write-artifact"],
+      "gate": "none"
+    },
+    {
+      "id": "diagnose",
+      "agent": "backend-developer",
+      "objective": "Find the root cause and say what the fix should be.",
+      "consumes": ["reproduction.md"],
+      "produces": ["diagnosis.md"],
+      "tools": ["read", "search", "run-command", "write-artifact"]
+    },
+    {
+      "id": "fix",
+      "agent": "backend-developer",
+      "objective": "Apply the smallest fix that addresses the root cause.",
+      "consumes": ["diagnosis.md"],
+      "produces": ["fix-summary.md"],
+      "tools": ["read", "write-code", "write-artifact", "run-command", "request-review"],
+      "changeBudget": { "maxFiles": 4, "maxLines": 120 },
+      "requireReviewBefore": ["write-code"],
+      "sensors": ["type-check", "linter", "docs-coverage"]
+    },
+    {
+      "id": "regression-test",
+      "agent": "qa-engineer",
+      "objective": "Add a test that fails without the fix and passes with it.",
+      "consumes": ["reproduction.md"],
+      "produces": ["test-results.md"],
+      "tools": ["read", "write-code", "run-command", "write-artifact"],
+      "changeBudget": { "maxFiles": 4, "maxLines": 150 },
+      "sensors": ["type-check", "linter"]
+    }
+  ]
+}
