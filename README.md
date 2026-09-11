@@ -126,6 +126,7 @@ pi log         # everything that has happened
 | `pi log` | The event history; `--step <id>` to narrow |
 | `pi workflows [<id>]` | List workflows, or show one in detail |
 | `pi agents [<id>]` | List personas, or show one in detail |
+| `pi sensors` | Dry-run the current step's checks |
 | `pi review request` | Stop and ask for review of a change |
 | `pi review resolve` | Answer the open review |
 | `pi review status` | Reviews on the current step |
@@ -194,6 +195,53 @@ Three things keep a receipt from being theatre: it fingerprints what you read
 (so an approval can't be retargeted at different work), the state store refuses
 any edit to it after the fact, and resolving requires a recorded human turn, so
 an unattended run can't approve its own work.
+
+## Sensors
+
+Sensors are deterministic checks that run when a step reports complete, so their
+findings reach you at the gate — the moment you're deciding. A step declares
+which ones it wants:
+
+```json
+"sensors": ["required-sections", "docs-coverage", "type-check", "linter"]
+```
+
+| Sensor | Asks |
+| --- | --- |
+| `required-sections` | Do the declared artifacts exist, have content, and contain no leftover `TBD`? |
+| `upstream-coverage` | Does the output engage with the inputs the step was given? |
+| `traceability` | Is every acceptance criterion accounted for in the validation? |
+| `docs-coverage` | Did code changes arrive with the documentation they imply? |
+| `type-check` | Does `checks.typeCheck` pass? |
+| `linter` | Does `checks.lint` pass? |
+
+Preview them before you reach the gate:
+
+```bash
+pi sensors              # dry-run the current step
+pi sensors --list       # the catalogue
+```
+
+**Sensors are advisory. They never block a write.** That's a deliberate
+asymmetry with the change budget, and the reason is false positives: "you are
+over 300 lines" is a count and is always right, while "this change needed
+documentation" is a judgement that will sometimes be wrong. A guard that's
+sometimes wrong trains people to route around guards; a report that's sometimes
+wrong costs a glance.
+
+Two related rules follow from that. A sensor that **can't** check something
+reports `skip` with the reason rather than passing — otherwise green would mean
+two different things. And a sensor that throws is reported as a broken sensor,
+never as a failing step.
+
+`type-check` and `linter` run commands you configure, and skip when you haven't:
+
+```json
+"checks": {
+  "typeCheck": "npm run typecheck",
+  "lint": "npm run lint"
+}
+```
 
 ## Personas
 
@@ -270,6 +318,10 @@ so persona files stay about the role.
     "hasBackend": true,
     "needsInfra": false,
     "isBrownfield": false
+  },
+  "checks": {
+    "typeCheck": "npm run typecheck",
+    "lint": "npm run lint"
   }
 }
 ```
@@ -282,6 +334,8 @@ so persona files stay about the role.
   `docs-coverage` sensor flags code changes that arrived without them.
   Everything matching `exempt` is excused.
 - **`changeBudget`** — an optional project-wide default that steps inherit.
+- **`checks`** — the commands the `type-check` and `linter` sensors run. Omit
+  one and that sensor skips; pi does not guess at your build tooling.
 
 ## Workflows
 
@@ -319,8 +373,8 @@ Workflows are compiled, not just parsed. `pi` rejects a workflow that consumes
 an artifact nobody produces, consumes one produced later, declares two producers
 for the same artifact, requires review before a tool the step was never granted,
 names a persona that does not exist, grants a persona a tool it does not hold,
-or wires a conditional producer into an unconditional consumer. Run `pi doctor`
-to see what failed and why.
+names an unknown sensor, or wires a conditional producer into an unconditional
+consumer. Run `pi doctor` to see what failed and why.
 
 ## The harness layer
 
@@ -387,8 +441,7 @@ strip types and run the source directly.
 ## Status
 
 Early, but usable end to end on Cursor: the engine, workflows, personas, the
-guard, review receipts, the CLI, and the Cursor harness.
+guard, review receipts, sensors, the CLI, and the Cursor harness.
 
-Still to come: the sensors (`docs-coverage`, `type-check`, `linter` are declared
-by workflows but not yet run), `pi rewind` to a checkpoint, and harnesses for
-Claude Code and Copilot.
+Still to come: `pi rewind` to a checkpoint, and harnesses for Claude Code and
+Copilot.

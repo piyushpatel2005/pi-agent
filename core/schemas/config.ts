@@ -44,6 +44,14 @@ export const DocsConfig = z.object({
 
 export type DocsConfig = z.infer<typeof DocsConfig>;
 
+/** Shell commands the sensors run to verify a step's work. */
+export const ChecksConfig = z.object({
+  typeCheck: z.string().min(1).optional(),
+  lint: z.string().min(1).optional(),
+});
+
+export type ChecksConfig = z.infer<typeof ChecksConfig>;
+
 export const ProjectConfig = z.object({
   version: z.literal(CONFIG_VERSION).default(CONFIG_VERSION),
 
@@ -66,6 +74,15 @@ export const ProjectConfig = z.object({
    * A step's own budget still wins when it is stricter.
    */
   changeBudget: ChangeBudget.optional(),
+
+  /**
+   * Commands the `type-check` and `linter` sensors run.
+   *
+   * Optional, and skipped rather than assumed when absent: pi does not guess at
+   * a project's build tooling, and a sensor that silently checked nothing would
+   * report green for the wrong reason.
+   */
+  checks: ChecksConfig.optional(),
 });
 
 export type ProjectConfig = z.infer<typeof ProjectConfig>;

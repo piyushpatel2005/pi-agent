@@ -29,6 +29,7 @@ import {
   next as routeNext,
   planSteps,
 } from "../core/engine/router.ts";
+import { SENSORS, renderSensors, runSensors } from "../core/engine/sensors.ts";
 import { createStateStore } from "../core/engine/state-store.ts";
 import {
   CONFIG_FILE,
@@ -120,6 +121,9 @@ function cmdInit(projectDir: string, args: Args): number {
       hasBackend: true,
       needsInfra: false,
     },
+    // Left empty deliberately: the type-check and linter sensors skip rather
+    // than guess, so fill these in with this project's real commands.
+    checks: {},
   };
 
   writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
@@ -359,13 +363,128 @@ function cmdReport(workspace: Workspace, args: Args): number {
   });
   log.appendAll(emitted);
 
+  // Sensors run when a step says it is done, so their findings reach the human
+  // at the gate — the moment they are about to decide.
+  const sensed =
+    result === StepResult.Completed
+      ? fireSensors(workspace, store, log, step)
+      : [];
+
   if (wantsJson(args)) {
-    console.log(JSON.stringify({ step, result, events: emitted.map((e) => e.type) }, null, 2));
+    console.log(
+      JSON.stringify({ step, result, events: emitted.map((e) => e.type), sensors: sensed }, null, 2),
+    );
     return 0;
   }
 
   console.log(`Recorded: ${step} → ${result}`);
   for (const event of emitted) console.log(`  ${event.type}`);
+
+  const lines = renderSensors(sensed);
+  if (lines.length > 0) {
+    console.log("");
+    for (const line of lines) console.log(line);
+  }
+  return 0;
+}
+
+/** Run a step's sensors, record what they found, and hand back the results. */
+function fireSensors(
+  workspace: Workspace,
+  store: Store,
+  log: Log,
+  stepId: string,
+): ReturnType<typeof runSensors> {
+  const state = store.read();
+  const workflow = requireWorkflow(workspace, state.workflow);
+  const step = workflow.steps.find((candidate) => candidate.id === stepId);
+  const stepState = state.steps[stepId];
+
+  if (!step || !stepState || step.sensors.length === 0) return [];
+
+  const results = runSensors({
+    step,
+    stepState,
+    workflow,
+    config: workspace.config,
+    paths: runPaths(workspace.projectDir, state.runId),
+    projectDir: workspace.projectDir,
+  });
+
+  log.appendAll(
+    results
+      .filter((result) => !result.skipped)
+      .map((result) => ({
+        type: EventType.SensorFired,
+        step: stepId,
+        sensor: result.sensor,
+        pass: result.pass,
+        findings: result.findings.map((finding) => finding.message),
+      })),
+  );
+
+  return results;
+}
+
+function cmdSensors(workspace: Workspace, args: Args): number {
+  // With no active run this is a catalogue; with one it is a dry run of the
+  // current step, so you can see what the gate will say before you get there.
+  const runId = activeRunId(workspace.projectDir);
+
+  if (!runId || args.flags.get("list") === true) {
+    if (wantsJson(args)) {
+      console.log(JSON.stringify(SENSORS.map(({ id, describes }) => ({ id, describes })), null, 2));
+      return 0;
+    }
+    for (const sensor of SENSORS) console.log(`${sensor.id.padEnd(20)} ${sensor.describes}`);
+    return 0;
+  }
+
+  const paths = runPaths(workspace.projectDir, runId);
+  const state = createStateStore(paths).read();
+  const workflow = requireWorkflow(workspace, state.workflow);
+  const stepId = flagString(args, "step") ?? state.currentStep;
+  const step = workflow.steps.find((candidate) => candidate.id === stepId);
+  const stepState = stepId ? state.steps[stepId] : undefined;
+
+  if (!step || !stepState) {
+    console.error(`No step "${stepId ?? "(none)"}" to run sensors for.`);
+    return 1;
+  }
+
+  const results = runSensors({
+    step,
+    stepState,
+    workflow,
+    config: workspace.config,
+    paths,
+    projectDir: workspace.projectDir,
+  });
+
+  if (wantsJson(args)) {
+    console.log(JSON.stringify(results, null, 2));
+    return 0;
+  }
+
+  if (results.length === 0) {
+    console.log(`Step "${step.id}" declares no sensors.`);
+    return 0;
+  }
+
+  for (const result of results) {
+    if (result.skipped) {
+      console.log(`skip  ${result.sensor} — ${result.skipped}`);
+      continue;
+    }
+    if (result.findings.length === 0) console.log(`ok    ${result.sensor}`);
+  }
+
+  const lines = renderSensors(results);
+  if (lines.length > 0) {
+    console.log("");
+    for (const line of lines) console.log(line);
+  }
+
   return 0;
 }
 
@@ -839,6 +958,7 @@ Usage
   pi log [--step <id>] [--json]            the run's event history
   pi workflows [<id>] [--json]             list workflows, or show one
   pi agents [<id>] [--json]                list personas, or show one
+  pi sensors [--step <id>] [--list]        dry-run the current step's checks
   pi doctor                                check this project's setup
   pi version
 
@@ -876,6 +996,9 @@ function main(argv: string[]): number {
     case "agents":
     case "agent":
       return cmdAgents(workspace, args);
+    case "sensors":
+    case "sensor":
+      return cmdSensors(workspace, args);
     case "report":
       return cmdReport(workspace, args);
     case "human-turn":

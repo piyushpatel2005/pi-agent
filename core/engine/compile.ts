@@ -39,6 +39,8 @@ export type CompileContext = {
    * granting more is an error, so a workflow cannot widen a role's reach.
    */
   agentTools?: Readonly<Record<string, readonly string[]>>;
+  /** Known sensor ids. Omit to skip the check. */
+  sensors?: readonly string[];
 };
 
 export function compileWorkflow(
@@ -216,6 +218,18 @@ function checkRosterReferences(
             severity: "error",
             path: `steps[${index}].tools[${slot}]`,
             message: `unknown tool "${tool}"${suggest(tool, context.tools)}`,
+          });
+        }
+      }
+    }
+
+    if (context.sensors) {
+      for (const [slot, sensor] of step.sensors.entries()) {
+        if (!context.sensors.includes(sensor)) {
+          issues.push({
+            severity: "error",
+            path: `steps[${index}].sensors[${slot}]`,
+            message: `unknown sensor "${sensor}"${suggest(sensor, context.sensors)}`,
           });
         }
       }

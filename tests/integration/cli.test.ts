@@ -329,6 +329,35 @@ describe("pi CLI: project overrides", () => {
     rmSync(join(project, "pi", "agents"), { recursive: true });
   });
 
+  test("a workflow naming an unknown sensor fails to compile", () => {
+    writeFileSync(
+      join(project, "pi", "workflows", "astro.workflow.json"),
+      JSON.stringify({
+        id: "astro",
+        name: "Astro",
+        version: 1,
+        description: "Consults the stars.",
+        steps: [
+          {
+            id: "build",
+            agent: "backend-developer",
+            objective: "Build it.",
+            produces: ["summary.md"],
+            tools: ["write-code"],
+            sensors: ["astrology"],
+          },
+        ],
+      }),
+      "utf-8",
+    );
+
+    const { code, out } = pi("doctor");
+    assert.equal(code, 1);
+    assert.match(out, /unknown sensor "astrology"/);
+
+    rmSync(join(project, "pi", "workflows", "astro.workflow.json"));
+  });
+
   test("an invalid config is a clear error, not a stack trace", () => {
     writeFileSync(join(project, "pi.config.json"), JSON.stringify({ version: "one" }), "utf-8");
 
