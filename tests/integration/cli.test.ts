@@ -40,10 +40,12 @@ describe("pi CLI", () => {
   test("lists the shipped workflows before any project setup", () => {
     const { code, out } = pi("workflows");
     assert.equal(code, 0);
-    for (const id of ["feature", "quick", "bugfix"]) assert.match(out, new RegExp(`^${id}\\b`, "m"));
+    for (const id of ["feature", "quick", "bugfix", "docs"]) {
+      assert.match(out, new RegExp(`^${id}\\b`, "m"));
+    }
   });
 
-  test("lists the seven personas", () => {
+  test("lists the eight personas", () => {
     const { code, out } = pi("agents");
     assert.equal(code, 0);
     for (const id of [
@@ -54,6 +56,7 @@ describe("pi CLI", () => {
       "backend-developer",
       "qa-engineer",
       "devops-engineer",
+      "technical-writer",
     ]) {
       assert.match(out, new RegExp(`^${id}\\b`, "m"));
     }

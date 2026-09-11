@@ -20,6 +20,7 @@ const EXPECTED_ROSTER = [
   "frontend-developer",
   "qa-engineer",
   "solution-architect",
+  "technical-writer",
   "ui-designer",
 ];
 
@@ -116,7 +117,7 @@ describe("effectiveTools", () => {
 describe("the shipped roster", () => {
   const roster = loadAgents("/nonexistent-project");
 
-  test("is exactly the seven personas, all valid", () => {
+  test("is exactly the eight personas, all valid", () => {
     assert.deepEqual([...roster.agents.keys()].sort(), EXPECTED_ROSTER);
     assert.deepEqual(roster.broken, []);
   });

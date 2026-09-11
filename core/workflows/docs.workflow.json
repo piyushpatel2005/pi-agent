@@ -1,0 +1,69 @@
+{
+  "id": "docs",
+  "name": "Documentation set",
+  "version": 1,
+  "description": "Plan a documentation set, write it, and verify every claim in it against the code.",
+  "defaults": {
+    "gate": "approval",
+    "checkpoint": true
+  },
+  "steps": [
+    {
+      "id": "survey",
+      "agent": "technical-writer",
+      "objective": "Read the project end to end and decide what the documentation set must contain: the audiences, the page list, and the single job each page does.",
+      "produces": ["docs-plan.md", "docs-findings.md"],
+      "tools": ["read", "search", "ask-user", "run-command", "write-artifact"],
+      "sensors": ["required-sections"]
+    },
+    {
+      "id": "concepts",
+      "agent": "technical-writer",
+      "objective": "Write the pages that explain what this is and why it is shaped this way, for a reader who has not used it.",
+      "consumes": ["docs-plan.md"],
+      "produces": ["concepts-summary.md"],
+      "tools": ["read", "search", "write-code", "run-command", "write-artifact", "request-review"],
+      "changeBudget": { "maxFiles": 4, "maxLines": 600 },
+      "sensors": ["required-sections", "upstream-coverage"]
+    },
+    {
+      "id": "guides",
+      "agent": "technical-writer",
+      "objective": "Write the task-shaped pages: installing, the first run, the daily loop, reviews and gates, and recovering when something goes wrong.",
+      "consumes": ["docs-plan.md"],
+      "produces": ["guides-summary.md"],
+      "tools": ["read", "search", "write-code", "run-command", "write-artifact", "request-review"],
+      "changeBudget": { "maxFiles": 7, "maxLines": 1200 },
+      "sensors": ["required-sections", "upstream-coverage"]
+    },
+    {
+      "id": "reference",
+      "agent": "technical-writer",
+      "objective": "Write the lookup pages: every command and flag, every configuration key, the sensors, the personas, and the shipped workflows.",
+      "consumes": ["docs-plan.md"],
+      "produces": ["reference-summary.md"],
+      "tools": ["read", "search", "write-code", "run-command", "write-artifact", "request-review"],
+      "changeBudget": { "maxFiles": 7, "maxLines": 1400 },
+      "sensors": ["required-sections", "upstream-coverage"]
+    },
+    {
+      "id": "extending",
+      "agent": "technical-writer",
+      "objective": "Write the pages for someone changing pi rather than using it: authoring a workflow, overriding a persona, adding a sensor, porting to another harness.",
+      "consumes": ["docs-plan.md"],
+      "produces": ["extending-summary.md"],
+      "tools": ["read", "search", "write-code", "run-command", "write-artifact", "request-review"],
+      "changeBudget": { "maxFiles": 6, "maxLines": 1000 },
+      "sensors": ["required-sections", "upstream-coverage"]
+    },
+    {
+      "id": "accuracy",
+      "agent": "business-analyst",
+      "objective": "Check the written documentation against the code. Run the commands it shows, confirm the defaults it states, and list every claim that is wrong, stale, or unverifiable.",
+      "consumes": ["docs-plan.md"],
+      "produces": ["accuracy-report.md"],
+      "tools": ["read", "search", "run-command", "write-artifact"],
+      "sensors": ["required-sections", "upstream-coverage"]
+    }
+  ]
+}

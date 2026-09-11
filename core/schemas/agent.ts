@@ -1,11 +1,11 @@
-// The seven personas.
+// The eight personas.
 //
 // A persona is a Markdown file: Zod-validated frontmatter declaring who it is
 // and what it may touch, then a body that is the operating instruction handed
 // to the model when a step activates that role.
 //
 // Keeping the roster small is deliberate. Every handoff between roles loses
-// context, so seven broad personas beat twenty narrow ones — a backend
+// context, so eight broad personas beat twenty narrow ones — a backend
 // developer who also writes their own migrations is better than a pair who
 // have to explain the schema to each other.
 

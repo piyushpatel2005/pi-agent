@@ -301,9 +301,10 @@ or read one in full with `pi agents backend-developer`.
 | `backend-developer` | Services, data models, APIs, migrations | yes |
 | `qa-engineer` | Test strategy and unit/integration/e2e tests | yes |
 | `devops-engineer` | Infrastructure, CI/CD, environments, security posture | yes |
+| `technical-writer` | Documentation for people outside the project, verified against the code | yes |
 
 The roster is small on purpose. Every handoff between roles loses context, so
-seven broad personas beat twenty narrow ones.
+eight broad personas beat twenty narrow ones.
 
 Each file's frontmatter declares what the role may touch:
 
@@ -457,19 +458,26 @@ description of your repo, and it is more useful shared than local.
 
 ## Workflows
 
-Three ship with `pi`:
+Four ship with `pi`:
 
 - **`feature`** — requirements, architecture, UX design, backend, frontend,
   tests, infrastructure, validation. Eight steps, most of them conditional.
 - **`quick`** — requirements, implementation, tests. For when you already know
   what you're building.
 - **`bugfix`** — reproduce, diagnose, fix, regression test.
+- **`docs`** — survey, then concepts, guides, reference, and extension pages,
+  then an accuracy pass that checks every claim against the code.
 
 Inspect one with `pi workflows feature`.
 
-To change how your team works, drop a JSON file in `pi/workflows/`. A file whose
-`id` matches a shipped workflow shadows it, so you can retune `feature` without
-forking `pi`. A step looks like this:
+### Workflows of your own
+
+Shipped workflows live inside the `pi` installation. Your own go in
+`pi/workflows/` **in your project**, and load second, so a file whose `id`
+matches a shipped workflow shadows it — that is how you retune `feature`
+without forking `pi`. `pi workflows` marks the project ones `(project)`.
+
+A step looks like this:
 
 ```json
 {

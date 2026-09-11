@@ -23,11 +23,22 @@ export const END = "# <<< pi <<<";
  * `pi/` directory that happens to exist somewhere in a source tree.
  */
 export const OWNED: readonly string[] = [
-  "/pi/",
+  // Run history only. `pi/workflows/` and `pi/agents/` are authored content —
+  // a team's own workflows and persona overrides — and hiding those would mean
+  // pi's extension points could never be committed.
+  "/pi/runs/",
   "/pi.config.json",
   "/.cursor/skills/pi/",
   "/.cursor/rules/pi.mdc",
 ];
+
+/**
+ * Files pi ignores only when it created them, remembered across installs.
+ *
+ * Anything else in a stale block is dropped on reinstall, so this list can
+ * change between versions without leaving entries nobody can account for.
+ */
+const REMEMBERED: readonly string[] = ["/.cursor/hooks.json", "/.cursor/cli.json"];
 
 export function renderBlock(paths: readonly string[]): string {
   return [
@@ -124,9 +135,10 @@ export function applyIgnore(projectDir: string, extra: readonly string[]): Ignor
   const path = join(projectDir, ".gitignore");
   const before = existsSync(path) ? readFileSync(path, "utf-8") : "";
 
-  // Union with what the block already claims, so reinstalling never gives back
-  // a path a previous install had taken responsibility for.
-  const paths = [...new Set([...OWNED, ...blockPaths(before), ...extra])];
+  // Union with the shared files the block already claims, so reinstalling never
+  // gives back a path a previous install took responsibility for.
+  const claimed = blockPaths(before).filter((path) => REMEMBERED.includes(path));
+  const paths = [...new Set([...OWNED, ...claimed, ...extra])];
   const after = withBlock(before, paths);
 
   if (after === before) return { wrote: null, notes };

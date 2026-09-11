@@ -12,6 +12,15 @@ so when it does.
 
 ## [Unreleased]
 
+### Added
+
+- An eighth persona, `technical-writer`, for documentation aimed at people
+  outside the project. It is required to verify claims against the code rather
+  than the existing docs, and to report what it could not check.
+- A fourth shipped workflow, `docs`: survey the project, write the concept,
+  guide, reference, and extension pages, then check every claim in them against
+  the code.
+
 ## [0.1.0] - 2026-09-11
 
 ### Added
@@ -36,8 +45,9 @@ so when it does.
   alone. Files and directories left empty by the removal — `hooks.json`,
   `cli.json`, `.cursor/skills/`, `.cursor/rules/`, and `.cursor/` itself — are
   deleted rather than left as husks.
-- `pi init` and `pi install` now add a marked block to the project's
-  `.gitignore` so nothing pi writes turns up in someone's commit. `.cursor/`
+- `pi init` and `pi install` add a marked block to the project's `.gitignore`,
+  so pi's config and run history stay out of someone's commit. Authored content
+  — `pi/workflows/` and `pi/agents/` — is deliberately left visible. `.cursor/`
   files pi merged into rather than created are left out of the block and
   reported instead, since `.gitignore` cannot hide a tracked file. Pass
   `--no-gitignore` to skip it. `pi uninstall` removes the block once there is
