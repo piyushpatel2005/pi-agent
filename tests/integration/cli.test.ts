@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
@@ -43,7 +43,31 @@ describe("pi CLI", () => {
     for (const id of ["feature", "quick", "bugfix"]) assert.match(out, new RegExp(`^${id}\\b`, "m"));
   });
 
-  test("every shipped workflow compiles", () => {
+  test("lists the seven personas", () => {
+    const { code, out } = pi("agents");
+    assert.equal(code, 0);
+    for (const id of [
+      "business-analyst",
+      "solution-architect",
+      "ui-designer",
+      "frontend-developer",
+      "backend-developer",
+      "qa-engineer",
+      "devops-engineer",
+    ]) {
+      assert.match(out, new RegExp(`^${id}\\b`, "m"));
+    }
+  });
+
+  test("shows one persona with its limits", () => {
+    const { code, out } = pi("agents", "backend-developer");
+    assert.equal(code, 0);
+    assert.match(out, /Backend Developer/);
+    assert.match(out, /Denied: delegate/);
+    assert.match(out, /Budget: 8 files \/ 300 lines/);
+  });
+
+  test("every shipped workflow compiles against the shipped roster", () => {
     const { code, out } = pi("doctor");
     assert.equal(code, 0, out);
     assert.match(out, /All checks passed/);
@@ -109,6 +133,15 @@ describe("pi CLI: a full run", () => {
 
     // Asking twice does not advance: the step is now active, not pending.
     assert.match(pi("next").out, /requirements/);
+  });
+
+  test("--brief renders the persona's full prompt for the step", () => {
+    const { code, out } = pi("next", "--brief");
+    assert.equal(code, 0);
+    assert.match(out, /^# Business Analyst/);
+    assert.match(out, /Add an orders service/);
+    assert.match(out, /acceptance-criteria\.md/);
+    assert.match(out, /pi report --step requirements --result completed/);
   });
 
   test("a step with no gate flows straight to the next one", () => {
@@ -237,6 +270,63 @@ describe("pi CLI: project overrides", () => {
     assert.equal(pi("workflows").code, 0);
 
     rmSync(join(project, "pi", "workflows", "bad.workflow.json"));
+  });
+
+  test("a workflow granting a role more than it holds fails to compile", () => {
+    writeFileSync(
+      join(project, "pi", "workflows", "overreach.workflow.json"),
+      JSON.stringify({
+        id: "overreach",
+        name: "Overreach",
+        version: 1,
+        description: "Asks the analyst to write code.",
+        steps: [
+          {
+            id: "write",
+            agent: "business-analyst",
+            objective: "Write the service.",
+            produces: ["summary.md"],
+            tools: ["read", "write-code"],
+          },
+        ],
+      }),
+      "utf-8",
+    );
+
+    const { code, out } = pi("doctor");
+    assert.equal(code, 1);
+    assert.match(out, /"business-analyst" may not use "write-code"/);
+
+    rmSync(join(project, "pi", "workflows", "overreach.workflow.json"));
+  });
+
+  test("a project persona shadows a shipped one", () => {
+    mkdirSync(join(project, "pi", "agents"), { recursive: true });
+    writeFileSync(
+      join(project, "pi", "agents", "ui-designer.md"),
+      "---\nid: ui-designer\nname: Our Designer\ndescription: Local rules.\ntools: [read]\n---\n\nFollow the house style guide.\n",
+      "utf-8",
+    );
+
+    const { code, out } = pi("agents", "ui-designer");
+    assert.equal(code, 0);
+    assert.match(out, /Our Designer/);
+    assert.match(out, /house style guide/);
+
+    rmSync(join(project, "pi", "agents"), { recursive: true });
+  });
+
+  test("a broken persona is reported, not crashed on", () => {
+    mkdirSync(join(project, "pi", "agents"), { recursive: true });
+    writeFileSync(join(project, "pi", "agents", "bad.md"), "no frontmatter here", "utf-8");
+
+    const { code, out } = pi("doctor");
+    assert.equal(code, 1);
+    assert.match(out, /bad\.md/);
+    // The shipped personas still load.
+    assert.match(pi("agents").out, /backend-developer/);
+
+    rmSync(join(project, "pi", "agents"), { recursive: true });
   });
 
   test("an invalid config is a clear error, not a stack trace", () => {

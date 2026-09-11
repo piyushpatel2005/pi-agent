@@ -241,6 +241,36 @@ describe("roster references", () => {
   });
 });
 
+describe("persona tool ceilings", () => {
+  const roster = {
+    agents: ["business-analyst", "solution-architect"],
+    tools: ["read", "write-artifact", "write-code"],
+    agentTools: {
+      "business-analyst": ["read", "write-artifact"],
+      "solution-architect": ["read", "write-artifact", "write-code"],
+    },
+  };
+
+  test("accepts a grant within the persona's ceiling", () => {
+    assert.equal(compileWorkflow(spec(), roster).ok, true);
+  });
+
+  test("a workflow cannot grant a role a tool it does not hold", () => {
+    const broken = spec();
+    broken.steps[0]!.tools = ["read", "write-code"];
+    expectIssue(
+      compileWorkflow(broken, roster),
+      /"business-analyst" may not use "write-code"/,
+    );
+  });
+
+  test("a narrower grant than the ceiling is fine", () => {
+    const narrow = spec();
+    narrow.steps[1]!.tools = ["read"];
+    assert.equal(compileWorkflow(narrow, roster).ok, true);
+  });
+});
+
 describe("when conditions", () => {
   test("rejects an unknown fact at parse time", () => {
     const broken = spec();

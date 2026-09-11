@@ -34,6 +34,11 @@ export type CompileContext = {
   agents?: readonly string[];
   /** Known tool ids. Omit to skip the check. */
   tools?: readonly string[];
+  /**
+   * What each persona is allowed to hold, by id. A step may grant a subset;
+   * granting more is an error, so a workflow cannot widen a role's reach.
+   */
+  agentTools?: Readonly<Record<string, readonly string[]>>;
 };
 
 export function compileWorkflow(
@@ -204,13 +209,32 @@ function checkRosterReferences(
       });
     }
 
-    if (!context.tools) return;
+    if (context.tools) {
+      for (const [slot, tool] of step.tools.entries()) {
+        if (!context.tools.includes(tool)) {
+          issues.push({
+            severity: "error",
+            path: `steps[${index}].tools[${slot}]`,
+            message: `unknown tool "${tool}"${suggest(tool, context.tools)}`,
+          });
+        }
+      }
+    }
+
+    // The persona is the ceiling. A step may narrow it but never widen it,
+    // otherwise "this role cannot write code" is only true until a workflow
+    // says otherwise.
+    const ceiling = context.agentTools?.[step.agent];
+    if (!ceiling) return;
+
     for (const [slot, tool] of step.tools.entries()) {
-      if (!context.tools.includes(tool)) {
+      if (!ceiling.includes(tool)) {
         issues.push({
           severity: "error",
           path: `steps[${index}].tools[${slot}]`,
-          message: `unknown tool "${tool}"${suggest(tool, context.tools)}`,
+          message:
+            `"${step.agent}" may not use "${tool}". That persona grants: ` +
+            `${ceiling.join(", ") || "(nothing)"}.`,
         });
       }
     }

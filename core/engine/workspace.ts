@@ -14,9 +14,11 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import { TOOL_NAMES } from "../schemas/agent.ts";
 import { ProjectConfig, defaultConfig } from "../schemas/config.ts";
 import type { CompiledWorkflow } from "../schemas/workflow.ts";
-import { compileWorkflow, type WorkflowIssue } from "./compile.ts";
+import { loadAgents, rosterContext, type AgentRoster } from "./agents.ts";
+import { compileWorkflow, type CompileContext, type WorkflowIssue } from "./compile.ts";
 import { runPaths, runsDir, type RunPaths } from "./paths.ts";
 
 export const CONFIG_FILE = "pi.config.json";
@@ -50,6 +52,8 @@ export type Workspace = {
   projectDir: string;
   config: ProjectConfig;
   configPath: string;
+  /** The personas available here; a project file shadows a shipped one. */
+  roster: AgentRoster;
   /** Compiled workflows by id; a project file shadows a shipped one. */
   workflows: Map<string, LoadedWorkflow>;
   /** Workflow files that failed to compile, kept so `pi doctor` can report them. */
@@ -60,16 +64,21 @@ export function openWorkspace(projectDir: string): Workspace {
   const configPath = join(projectDir, CONFIG_FILE);
   const config = readConfig(configPath);
 
+  // Personas load first: workflows are compiled against them, so a workflow
+  // naming a role that does not exist fails here rather than mid-run.
+  const roster = loadAgents(projectDir);
+  const context: CompileContext = { tools: TOOL_NAMES, ...rosterContext(roster) };
+
   const workflows = new Map<string, LoadedWorkflow>();
   const broken: BrokenWorkflow[] = [];
 
   // Project workflows load second so they shadow a shipped workflow of the
   // same id — that is how a team retunes `feature` without forking pi.
   for (const dir of [SHIPPED_WORKFLOWS, join(projectDir, "pi", "workflows")]) {
-    loadWorkflowsFrom(dir, workflows, broken);
+    loadWorkflowsFrom(dir, context, workflows, broken);
   }
 
-  return { projectDir, config, configPath, workflows, broken };
+  return { projectDir, config, configPath, roster, workflows, broken };
 }
 
 function readConfig(configPath: string): ProjectConfig {
@@ -98,6 +107,7 @@ function readConfig(configPath: string): ProjectConfig {
 
 function loadWorkflowsFrom(
   dir: string,
+  context: CompileContext,
   into: Map<string, LoadedWorkflow>,
   broken: BrokenWorkflow[],
 ): void {
@@ -120,7 +130,7 @@ function loadWorkflowsFrom(
       continue;
     }
 
-    const result = compileWorkflow(raw);
+    const result = compileWorkflow(raw, context);
     if (!result.ok) {
       broken.push({ source, issues: result.issues });
       continue;

@@ -119,6 +119,7 @@ pi log         # everything that has happened
 | `pi status` | Progress against the workflow |
 | `pi log` | The event history; `--step <id>` to narrow |
 | `pi workflows [<id>]` | List workflows, or show one in detail |
+| `pi agents [<id>]` | List personas, or show one in detail |
 | `pi human-turn` | Record that a human acted (gates require this) |
 | `pi doctor` | Check this project's setup |
 
@@ -135,6 +136,61 @@ Approval gates need evidence that a person was actually there. `pi report
 interactive terminal. When a harness drives `pi` non-interactively, the harness
 hook calls `pi human-turn` on the user's real messages instead. Either way, an
 agent running unattended cannot manufacture its own approval.
+
+## Personas
+
+Seven roles, each a Markdown file in `core/agents/`. See them with `pi agents`,
+or read one in full with `pi agents backend-developer`.
+
+| Persona | Owns | Writes code |
+| --- | --- | --- |
+| `business-analyst` | Requirements, acceptance criteria, final validation | no |
+| `solution-architect` | Boundaries, contracts, technology choices | structure only |
+| `ui-designer` | Screens, flows, states, accessibility | no |
+| `frontend-developer` | Client implementation against contract and design | yes |
+| `backend-developer` | Services, data models, APIs, migrations | yes |
+| `qa-engineer` | Test strategy and unit/integration/e2e tests | yes |
+| `devops-engineer` | Infrastructure, CI/CD, environments, security posture | yes |
+
+The roster is small on purpose. Every handoff between roles loses context, so
+seven broad personas beat twenty narrow ones.
+
+Each file's frontmatter declares what the role may touch:
+
+```yaml
+---
+id: backend-developer
+name: Backend Developer
+description: Implements services, data models, and APIs against the approved contract.
+tools: [read, search, write-artifact, write-code, run-command, request-review]
+denyTools: [delegate]
+changeBudget: { maxFiles: 8, maxLines: 300 }
+writesCode: true
+---
+```
+
+`tools` is a **ceiling, not a default**. A workflow step grants a subset of it;
+a step asking for more fails to compile, so a workflow cannot hand the business
+analyst a code editor by asking nicely. `delegate` is denied to every persona —
+only the conductor dispatches, so a worker can't quietly become an orchestrator
+and bury a decision one level below what the log can see.
+
+`writesCode` decides whether the generated documentation contract appears in
+that role's brief.
+
+To change how a role works, drop a file with the same `id` in `pi/agents/`. It
+replaces the shipped one.
+
+### The brief
+
+`pi next --brief` renders what a coding agent should actually be given: the
+persona, the step's objective, the artifacts to read and write, the tools it
+holds, the documentation contract, and the budget — assembled as one prompt.
+The short `pi next` is for humans.
+
+The parts that vary per project (where docs live, what this step may touch, how
+much it may change) come from configuration rather than from the persona file,
+so persona files stay about the role.
 
 ## Configuration
 
@@ -204,6 +260,7 @@ forking `pi`. A step looks like this:
 Workflows are compiled, not just parsed. `pi` rejects a workflow that consumes
 an artifact nobody produces, consumes one produced later, declares two producers
 for the same artifact, requires review before a tool the step was never granted,
+names a persona that does not exist, grants a persona a tool it does not hold,
 or wires a conditional producer into an unconditional consumer. Run `pi doctor`
 to see what failed and why.
 
@@ -234,6 +291,7 @@ strip types and run the source directly.
 
 ## Status
 
-Early. The engine, schemas, workflows, and CLI work end to end. Persona
-definitions, the tool registry with its reviewer gate, the sensors, and the
-Cursor harness projection are still being built.
+Early. The engine, schemas, workflows, personas, and CLI work end to end. The
+tool registry with its reviewer gate, the sensors, and the Cursor harness
+projection are still being built — which means budgets and review requirements
+are currently stated in the brief but not yet mechanically enforced.

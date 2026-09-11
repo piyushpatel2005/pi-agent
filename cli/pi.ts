@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
+import { renderBrief, requireAgent } from "../core/engine/agents.ts";
 import { createEventLog } from "../core/engine/event-log.ts";
 import { runPaths } from "../core/engine/paths.ts";
 import {
@@ -209,6 +210,14 @@ function cmdNext(workspace: Workspace, args: Args): number {
     }
   }
 
+  // `--brief` is what a coding agent asks for: the persona, the objective, and
+  // the constraints as one prompt. Humans want the short form.
+  if (directive.kind === DirectiveKind.RunStep && args.flags.get("brief") === true) {
+    const agent = requireAgent(workspace.roster, directive.agent);
+    console.log(renderBrief(agent, directive, { goal: state.goal, docs: workspace.config.docs }));
+    return 0;
+  }
+
   if (wantsJson(args)) {
     console.log(JSON.stringify(directive, null, 2));
     return directive.kind === DirectiveKind.Error ? 1 : 0;
@@ -216,6 +225,41 @@ function cmdNext(workspace: Workspace, args: Args): number {
 
   renderDirective(directive);
   return directive.kind === DirectiveKind.Error ? 1 : 0;
+}
+
+function cmdAgents(workspace: Workspace, args: Args): number {
+  const id = args.positional[0];
+  const roster = workspace.roster;
+
+  if (!id) {
+    if (wantsJson(args)) {
+      console.log(JSON.stringify([...roster.agents.values()].map(({ body, ...rest }) => rest), null, 2));
+      return 0;
+    }
+    for (const agent of [...roster.agents.values()].sort((a, b) => a.id.localeCompare(b.id))) {
+      console.log(`${agent.id.padEnd(20)} ${agent.description}`);
+    }
+    for (const failure of roster.broken) console.error(`\nFAILED ${failure.message}`);
+    return roster.broken.length > 0 ? 1 : 0;
+  }
+
+  const agent = requireAgent(roster, id);
+  if (wantsJson(args)) {
+    console.log(JSON.stringify(agent, null, 2));
+    return 0;
+  }
+
+  console.log(`${agent.name} (${agent.id})`);
+  console.log(agent.description);
+  console.log("");
+  console.log(`Tools:  ${agent.tools.join(", ") || "(none)"}`);
+  console.log(`Denied: ${agent.denyTools.join(", ") || "(none)"}`);
+  if (agent.changeBudget) {
+    console.log(`Budget: ${agent.changeBudget.maxFiles} files / ${agent.changeBudget.maxLines} lines`);
+  }
+  console.log("");
+  console.log(agent.body);
+  return 0;
 }
 
 /**
@@ -448,6 +492,12 @@ function cmdDoctor(workspace: Workspace): number {
     ? ok(`${CONFIG_FILE} present`)
     : console.log(`warn  no ${CONFIG_FILE}; using defaults (run \`pi init\`)`);
 
+  workspace.roster.agents.size > 0
+    ? ok(`${workspace.roster.agents.size} persona(s) loaded`)
+    : bad("no personas loaded");
+
+  for (const failure of workspace.roster.broken) bad(failure.message);
+
   workspace.workflows.size > 0
     ? ok(`${workspace.workflows.size} workflow(s) loaded`)
     : bad("no workflows loaded");
@@ -553,12 +603,13 @@ Usage
   pi init [--harness <name>] [--force]     scaffold pi.config.json in this project
   pi start "<goal>" [--workflow <id>]      begin a run
   pi status [--json]                       where the active run is
-  pi next [--json]                         what to do now
+  pi next [--brief] [--json]               what to do now; --brief for the full prompt
   pi report --step <id> --result <r>       record the outcome of a step
              [--artifacts a,b] [--feedback "..."] [--error "..."]
   pi human-turn [--source <name>]          record that a human acted (gates need this)
   pi log [--step <id>] [--json]            the run's event history
   pi workflows [<id>] [--json]             list workflows, or show one
+  pi agents [<id>] [--json]                list personas, or show one
   pi doctor                                check this project's setup
   pi version
 
@@ -591,6 +642,9 @@ function main(argv: string[]): number {
       return cmdStart(workspace, args);
     case "next":
       return cmdNext(workspace, args);
+    case "agents":
+    case "agent":
+      return cmdAgents(workspace, args);
     case "report":
       return cmdReport(workspace, args);
     case "human-turn":

@@ -100,3 +100,4 @@ export const Directive = z.discriminatedUnion("kind", [
 
 export type Directive = z.infer<typeof Directive>;
 export type DirectiveOf<K extends DirectiveKind> = Extract<Directive, { kind: K }>;
+export type RunStepDirective = DirectiveOf<typeof DirectiveKind.RunStep>;
