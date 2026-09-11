@@ -12,6 +12,8 @@ so when it does.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-11
+
 ### Added
 
 - `pi start`, `pi next`, `pi report`, `pi status`, and `pi log`: the run loop.
