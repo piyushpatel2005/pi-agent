@@ -10,6 +10,7 @@ import {
   isPrerelease,
   isVersion,
   latestRelease,
+  releaseNotes,
   releasedVersions,
   unreleasedBody,
 } from "../../scripts/changelog.ts";
@@ -85,10 +86,44 @@ describe("the changelog keeps up with the version", () => {
 
   test("released work is described, not just numbered", () => {
     for (const version of releasedVersions(changelog)) {
-      const body = changelog.slice(changelog.indexOf(`## [${version}]`));
-      const section = body.slice(0, body.slice(2).search(/^## /m) + 2 || undefined);
-      assert.notEqual(section.trim().split("\n").length, 1, `${version} has no notes`);
+      assert.notEqual(releaseNotes(changelog, version).trim(), "", `${version} has no notes`);
     }
+  });
+});
+
+describe("releaseNotes", () => {
+  const text = [
+    "# Changelog",
+    "",
+    "## [Unreleased]",
+    "",
+    "## [0.2.0] - 2026-02-01",
+    "",
+    "- the newer thing",
+    "",
+    "## [0.1.0] - 2026-01-01",
+    "",
+    "- the older thing",
+    "",
+  ].join("\n");
+
+  test("reads a section that has another heading after it", () => {
+    assert.equal(releaseNotes(text, "0.2.0").trim(), "- the newer thing");
+  });
+
+  test("reads the last section, which has no heading to stop at", () => {
+    // The case that broke: with nothing following, there is no next heading to
+    // find, and the naive version returned a single character instead.
+    assert.equal(releaseNotes(text, "0.1.0").trim(), "- the older thing");
+  });
+
+  test("does not mistake the heading's own date for notes", () => {
+    assert.doesNotMatch(releaseNotes(text, "0.2.0"), /2026-02-01/);
+  });
+
+  test("is empty for a version with no heading, and one with no notes", () => {
+    assert.equal(releaseNotes(text, "9.9.9"), "");
+    assert.equal(releaseNotes("## [0.1.0] - 2026-01-01\n\n## [0.0.9] - 2025-01-01\n", "0.1.0").trim(), "");
   });
 });
 

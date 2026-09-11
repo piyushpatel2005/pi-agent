@@ -27,6 +27,26 @@ export function closeUnreleased(text: string, version: string, date: string): st
   return text.replace(UNRELEASED, `${UNRELEASED}\n\n## [${version}] - ${date}`);
 }
 
+/**
+ * The notes under one release's heading.
+ *
+ * Returns "" when the version has no heading or nothing written under it. The
+ * last section in the file is the case worth being careful about: there is no
+ * following heading to stop at, so it runs to the end.
+ */
+export function releaseNotes(text: string, version: string): string {
+  const heading = text.indexOf(`## [${version}]`);
+  if (heading === -1) return "";
+
+  // Start after the heading's own line, so the date is not mistaken for notes.
+  const start = text.indexOf("\n", heading);
+  if (start === -1) return "";
+
+  const rest = text.slice(start);
+  const next = rest.search(/^## /m);
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
 /** The most recent released version in the changelog, ignoring Unreleased. */
 export function latestRelease(text: string): string | undefined {
   return /^## \[(\d+\.\d+\.\d+[0-9A-Za-z.-]*)\]/m.exec(text)?.[1];
