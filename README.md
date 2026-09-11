@@ -162,8 +162,12 @@ pi next                                     # what to do now
 pi report --step <id> --result completed    # what happened
 ```
 
-`pi --help` lists every command and flag.
-**[Commands](docs/reference/commands.md)** documents what each one requires of
+`pi --help` lists every command and flag. Long-form pages under `docs/` use a
+two-digit sequence prefix (`01-what-pi-is.md`, …). Build and serve them locally
+with `pi docs serve` (markdown + Mermaid diagrams), or `pi docs build` for static
+output only.
+
+**[Commands](docs/reference/08-commands.md)** documents what each one requires of
 the run, what it produces, and what it refuses — including the step state
 machine.
 
@@ -194,7 +198,7 @@ Three things keep a receipt from being theatre: it fingerprints what you read
 any edit to it after the fact, and resolving requires a recorded human turn, so
 an unattended run can't approve its own work.
 
-**[Reviews and budgets](docs/guides/reviews-and-budgets.md)** has every refusal
+**[Reviews and budgets](docs/guides/06-reviews-and-budgets.md)** has every refusal
 message, the exact budget mechanics, and what to do about each.
 
 ## Sensors
@@ -229,7 +233,7 @@ One consequence to know: a sensor that **can't** check something skips, and at a
 gate a skip prints nothing at all — indistinguishable from a clean pass. `pi
 sensors` is what shows you the difference.
 
-**[Sensors](docs/reference/sensors.md)** covers what each one checks and exactly
+**[Sensors](docs/reference/10-sensors.md)** covers what each one checks and exactly
 when it skips.
 
 ## Personas
@@ -250,7 +254,7 @@ a decision one level below what the log can see.
 To change how a role works, drop a file with the same `id` in `pi/agents/`. It
 replaces the shipped one.
 
-**[Personas](docs/extending/personas.md)** covers every frontmatter field, how
+**[Personas](docs/extending/12-personas.md)** covers every frontmatter field, how
 tool grants resolve, and what belongs in the body.
 
 ### The brief
@@ -302,7 +306,7 @@ start of the run, so you see up front what won't happen. **A fact you leave out
 counts as false**, so an empty `facts` block silently skips every conditional
 step — `pi status` after `pi start` is worth a look.
 
-**[Configuration](docs/reference/configuration.md)** documents every key, its
+**[Configuration](docs/reference/09-configuration.md)** documents every key, its
 default, the canonical fact names, and how the `docs` policy is applied.
 
 ### Keeping pi out of your commits
@@ -372,7 +376,7 @@ names a persona that does not exist, grants a persona a tool it does not hold,
 names an unknown sensor, or wires a conditional producer into an unconditional
 consumer. Run `pi doctor` to see what failed and why.
 
-**[Workflows](docs/extending/workflows.md)** documents every field a step may
+**[Workflows](docs/extending/11-workflows.md)** documents every field a step may
 declare, with a worked example.
 
 ## The harness layer
@@ -387,7 +391,7 @@ layer is the seam between them, and it is deliberately thin — three things:
    `next` / work / `report` loop.
 3. **A permission** so running `pi` doesn't prompt on every call.
 
-**[Harnesses](docs/extending/harnesses.md)** documents the seam in full, for
+**[Harnesses](docs/extending/13-harnesses.md)** documents the seam in full, for
 porting pi to a tool that is not Cursor.
 
 `pi uninstall` reverses it: pi's hooks come out, `Shell(pi)` is revoked, and the

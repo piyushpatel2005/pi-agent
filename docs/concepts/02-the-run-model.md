@@ -79,7 +79,7 @@ decides routing, not the agent. `pi next --brief` prints the full prompt for the
 step: the persona, the objective, the artifacts, the tools, the limits.
 
 `pi report` records the outcome. The results you can report are `completed`,
-`approved`, `rejected`, and `failed`.
+`needs-review`, `approved`, `rejected`, and `failed`.
 
 Reporting `completed` means the work is done and its artifacts exist. It does
 not mean you stopped. If something blocked you, the honest report is:
@@ -117,10 +117,20 @@ pi tracks when a human last acted, and refuses to record an approval unless that
 happened after the last gate was resolved. Approving twice in a row without a
 human doing anything in between is refused.
 
-In practice a human turn is recorded when you type in your coding tool's chat,
-or when you run an approving command in an interactive terminal. In a fully
-non-interactive session there is no human turn, so approvals refuse — which is
-the intended behavior, not a bug.
+A **human turn** is evidence that a person acted since the last gate resolved.
+pi records one when:
+
+- you **type and submit** a top-level message in your coding tool's chat (Cursor
+  fires `beforeSubmitPrompt` for that case), or
+- you run `pi human-turn` yourself in a terminal.
+
+These do **not** count: clicking an option card, approving a suggested command,
+or any UI interaction that does not go through a typed submission. If you made a
+decision that way and a gate still refuses, type a short message in chat or run
+`pi human-turn`, then retry the approval.
+
+In a fully non-interactive session there is no human turn, so approvals refuse —
+which is the intended behavior, not a bug.
 
 ## Reviews
 
@@ -189,5 +199,5 @@ history of everything that became true.
 
 ## Next
 
-[Guards and advice](guards-and-advice.md) covers the part of pi with teeth —
+[Guards and advice](03-guards-and-advice.md) covers the part of pi with teeth —
 what can actually refuse a tool call, and what merely tells you something.

@@ -7,7 +7,7 @@ is not — every refusal names a reason and the command that resolves it. This
 page covers all of them, with the messages you will actually see.
 
 For the difference between the guard and sensors, see
-[Guards and advice](../concepts/guards-and-advice.md).
+[Guards and advice](../concepts/03-guards-and-advice.md).
 
 ## Reading a refusal
 
@@ -97,7 +97,7 @@ human.
 
 ### The run is not accepting changes
 
-The run has failed. See [When things go wrong](when-things-go-wrong.md).
+The run has failed. See [When things go wrong](07-when-things-go-wrong.md).
 
 ## How the budget actually works
 
@@ -200,6 +200,20 @@ pi review resolve --approve
 Each gate needs its own human turn; resolving one does not bank credit for the
 next.
 
+### What counts as a human turn
+
+pi records a human turn when:
+
+- you **type and submit** a top-level message in your coding tool's chat (Cursor
+  fires `beforeSubmitPrompt` for that case), or
+- you run `pi human-turn` yourself in a terminal.
+
+These do **not** count: clicking an option card, approving a suggested command, or
+any UI interaction that is not a typed submission. This is the most common
+reason a gate appears stuck after you already "said yes" in the UI — the decision
+was not recorded as a human turn. Type a short message in chat or run
+`pi human-turn`, then retry the approval.
+
 ## Three things not to do
 
 The refusal messages warn against all three because all three are what an agent
@@ -217,5 +231,5 @@ A refusal is a fact about the shape of the work, not an obstacle.
 
 ## Next
 
-[When things go wrong](when-things-go-wrong.md) — failed runs, stuck gates, and
+[When things go wrong](07-when-things-go-wrong.md) — failed runs, stuck gates, and
 rewinding.

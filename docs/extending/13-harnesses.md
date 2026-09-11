@@ -200,5 +200,5 @@ The properties worth pinning:
 
 ## See also
 
-- [Guards and advice](../concepts/guards-and-advice.md) — what the guard decides
-- [Commands](../reference/commands.md) — the CLI an adapter calls
+- [Guards and advice](../concepts/03-guards-and-advice.md) — what the guard decides
+- [Commands](../reference/08-commands.md) — the CLI an adapter calls

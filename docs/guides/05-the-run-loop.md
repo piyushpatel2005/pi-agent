@@ -3,7 +3,7 @@
 **This page answers one question: what do I do every day, and what does each
 command do to the run?**
 
-[Getting started](getting-started.md) walked one path end to end. This page is
+[Getting started](04-getting-started.md) walked one path end to end. This page is
 the working reference for the loop itself.
 
 ## The three commands
@@ -55,11 +55,12 @@ scope, say so in your summary rather than fixing it quietly.
 
 ## `pi report`
 
-Records the outcome. Four results:
+Records the outcome. Five results:
 
 | Result | Use it when | What happens |
 | --- | --- | --- |
 | `completed` | The work is done and its artifacts exist | Step finishes, or waits at its gate |
+| `needs-review` | You want a human look before the gate | Step moves to `awaiting-review` |
 | `approved` | You are the human clearing a gate | Step finishes, run advances |
 | `rejected` | You are sending work back | Step returns to active with your feedback |
 | `failed` | Something stopped you | The step and the run both fail |
@@ -124,9 +125,15 @@ opening a gate.
 ### Why you cannot approve from the agent
 
 pi refuses an approval unless a human has acted since the last gate resolved. In
-a non-interactive session there is no such record, so the approval refuses. Run
-the approving command yourself in a terminal, or type in your editor's chat,
-which records a human turn.
+a non-interactive session there is no such record, so the approval refuses.
+
+A human turn is recorded when you **type and submit** a top-level message in
+your editor's chat, or when you run `pi human-turn` in a terminal. Clicking an
+option card or approving a suggested command does **not** count — if a gate
+stays shut after you clicked something, type a short message in chat and retry.
+
+The agent may run `pi report --result approved` when the harness allows it, but
+the engine still refuses unless a human turn was recorded since the last gate.
 
 ## Seeing where you are
 
@@ -191,9 +198,9 @@ pass.
 | `pi workflows <id>` | Inspect a workflow |
 | `pi doctor` | Check the project's setup |
 
-Full flags: [Commands](../reference/commands.md).
+Full flags: [Commands](../reference/08-commands.md).
 
 ## Next
 
-[Reviews and budgets](reviews-and-budgets.md) — what happens when the work gets
+[Reviews and budgets](06-reviews-and-budgets.md) — what happens when the work gets
 bigger than the step allows.

@@ -67,7 +67,7 @@
       "produces": ["test-plan.md", "test-results.md"],
       "tools": ["read", "search", "write-code", "write-artifact", "run-command", "request-review"],
       "changeBudget": { "maxFiles": 12, "maxLines": 500 },
-      "sensors": ["type-check", "linter"]
+      "sensors": ["type-check", "linter", "docs-coverage"]
     },
     {
       "id": "infrastructure",

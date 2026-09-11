@@ -188,5 +188,5 @@ still loads.
 
 ## See also
 
-- [Workflows](workflows.md) — binding a persona to a step
-- [Configuration](../reference/configuration.md) — the `docs` policy in the brief
+- [Workflows](11-workflows.md) — binding a persona to a step
+- [Configuration](../reference/09-configuration.md) — the `docs` policy in the brief

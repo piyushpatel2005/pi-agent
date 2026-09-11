@@ -272,7 +272,48 @@ registered sensor.
 
 Unlike the gate, **this prints skips with their reasons** — which is the reason
 to use it. A skipped sensor at a gate prints nothing and looks exactly like a
-clean pass. See [Sensors](sensors.md).
+clean pass. See [Sensors](10-sensors.md).
+
+### `pi docs build`
+
+Writes a static HTML site from the sequenced markdown files under the project's
+`docs.dir` (default `docs/`). Only files matching `NN-slug.md` are included —
+for example `01-what-pi-is.md`, `02-the-run-model.md`.
+
+Markdown is rendered to HTML. Fenced blocks marked `mermaid` are rendered as
+diagrams using the bundled [Mermaid](https://mermaid.js.org/) library copied
+into `assets/mermaid/`.
+
+```bash
+pi docs build
+pi docs build --out website/static/docs
+```
+
+Output:
+
+- `index.html` — ordered table of contents
+- `pages/*.html` — one page per markdown file
+- `manifest.json` — machine-readable order for other tools
+- `assets/mermaid/` — Mermaid runtime for diagram rendering
+
+Does not touch the run. Refuses with a non-zero exit when no sequenced pages
+are found.
+
+### `pi docs serve`
+
+Builds the site (unless `--no-build`) and serves it locally over HTTP.
+
+```bash
+pi docs serve
+pi docs serve --port 8080 --host 0.0.0.0
+pi docs serve --no-build --out dist/docs
+```
+
+Defaults to `http://127.0.0.1:4173/`. The process runs until you press Ctrl+C.
+Use this while editing markdown; re-run or restart without `--no-build` to pick
+up changes.
+
+Equivalent npm scripts: `npm run docs:build` and `npm run docs:serve`.
 
 ### `pi version`
 

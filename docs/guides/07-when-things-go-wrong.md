@@ -91,20 +91,21 @@ A review cannot be resolved without a human: no human turn has been recorded
 since the last gate. Review requires an interactive session.
 ```
 
-Run the approving command yourself in a terminal, or record the turn:
+A human turn is recorded when you **type and submit** a top-level message in
+chat, or when you run `pi human-turn` in a terminal. Clicking an option card or
+approving a suggested command does **not** count. If you made a decision that
+way and the gate still refuses, type a short message in chat, then retry:
 
 ```bash
-pi human-turn
 pi report --step requirements --result approved
 ```
 
 Each gate needs its own human turn.
 
-**Check who is running it.** If your coding agent is running the approval on
-your behalf through its own tool loop, the guard may refuse it — a step at a
-gate is frozen, and the approval arrives as just another guarded tool call. Run
-it yourself in a terminal instead. Your keystrokes are not agent tool calls, so
-the hooks do not apply.
+**Check compound shell commands.** If an agent runs `cd … && pi report …`, the
+`&&` disqualifies the line from pi's control-plane allowlist and the guard treats
+it as a normal shell command — which a frozen step refuses. Bare `pi report …`
+from the project directory is allowed; chained commands are not.
 
 ## The step will not start
 
@@ -151,11 +152,15 @@ ok    pi.config.json present
 ok    wired into cursor
 ok    8 persona(s) loaded
 ok    4 workflow(s) loaded
-ok    0 run(s) on disk
+ok    7 run(s) on disk
+ok    active run 21a59ada-… is readable
+ok    event log is intact
+ok    checkpoints match their snapshots
 
 All checks passed.
 ```
 
+The run count and active-run id change with your project; the shape does not.
 `pi doctor` checks the project setup and the integrity of the run, and reports
 broken persona or workflow files rather than crashing on them.
 

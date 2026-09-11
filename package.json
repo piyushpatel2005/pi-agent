@@ -18,12 +18,15 @@
     "CHANGELOG.md"
   ],
   "scripts": {
+    "docs:build": "pi docs build",
+    "docs:serve": "pi docs serve",
     "test": "node --test",
     "typecheck": "tsc --noEmit",
     "release": "node scripts/release.ts",
     "changes": "node scripts/changes.ts"
   },
   "dependencies": {
+    "mermaid": "^11.17.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -23,7 +23,87 @@ updates.
 
 `pi workflows` marks project ones `(project)`. `pi init` creates the directory.
 
-The same two-layer rule applies to personas; see [Personas](personas.md).
+The same two-layer rule applies to personas; see [Personas](12-personas.md).
+
+## How a run moves through personas
+
+A workflow is a **sequence of steps**, not parallel work. pi hands out one step
+at a time; each step names exactly one persona. When a step finishes (and its
+gate clears, if it has one), the run advances to the next step in workflow
+order — the engine decides, not the agent.
+
+The `feature` workflow is the fullest example. Solid arrows are always present;
+dashed steps run only when the matching `facts` value is true at `pi start`:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant H as Human
+  participant P as pi engine
+  participant BA as business-analyst
+  participant SA as solution-architect
+  participant UI as ui-designer
+  participant BE as backend-developer
+  participant FE as frontend-developer
+  participant QA as qa-engineer
+  participant DO as devops-engineer
+
+  H->>P: pi start "…" --workflow feature
+  P->>BA: requirements
+  BA->>P: pi report --result completed
+  P->>H: approval gate
+  H->>P: pi report --result approved
+
+  P->>SA: architecture
+  SA->>P: completed → approved
+
+  opt hasFrontend
+    P->>UI: ux-design
+    UI->>P: completed → approved
+  end
+
+  opt hasBackend
+    P->>BE: backend-implementation
+    BE->>P: completed → approved
+  end
+
+  opt hasFrontend
+    P->>FE: frontend-implementation
+    FE->>P: completed → approved
+  end
+
+  P->>QA: tests
+  QA->>P: completed → approved
+
+  opt needsInfra
+    P->>DO: infrastructure
+    DO->>P: completed → approved
+  end
+
+  P->>BA: validation
+  BA->>P: completed → approved
+  P->>H: run completed
+```
+
+Three things the diagram compresses but you should keep in mind:
+
+**Artifacts chain the steps.** `architecture` consumes `requirements.md`; `tests`
+consumes `acceptance-criteria.md`. A step reads what earlier steps produced
+rather than guessing.
+
+**The same persona can appear more than once.** `business-analyst` opens the run
+(requirements) and closes it (validation). Each appearance is a separate step
+with its own budget, gate, and artifacts.
+
+**Gates repeat per step.** Every `completed → approved` pair is an approval gate
+unless the step declares `gate: "none"`. The human turn between gates is what
+stops an agent from approving its own work — see
+[Reviews and budgets](../guides/06-reviews-and-budgets.md).
+
+Shorter workflows are subsets of the same pattern. `quick` is requirements →
+backend-developer → qa-engineer. `bugfix` is qa-engineer → backend-developer →
+qa-engineer again. `docs` rotates technical-writer steps and ends with a
+business-analyst accuracy pass.
 
 ## The smallest workflow that works
 
@@ -117,7 +197,7 @@ back to the user.
 
 Conditions resolve against `facts` in `pi.config.json`, **once, at `pi start`**.
 A fact that is absent counts as false. See
-[Configuration](../reference/configuration.md).
+[Configuration](../reference/09-configuration.md).
 
 ### `gate` and `checkpoint`
 
@@ -152,7 +232,13 @@ the overflow.
 ```
 
 Advisory only; they never block. The six available ones and their skip
-conditions are in [Sensors](../reference/sensors.md).
+conditions are in [Sensors](../reference/10-sensors.md).
+
+**Any step that grants `write-code` should include `docs-coverage`.** The sensor
+warns at the gate when source changed but no documentation surface was touched.
+Every shipped workflow follows this on its implementation steps; add it to
+project workflows the same way. Test-only changes are usually exempt via
+`docs.exempt` in `pi.config.json`.
 
 **Sensors are a closed registry in pi's own code.** Unlike workflows and
 personas, you cannot add one from your project — a name with no registered

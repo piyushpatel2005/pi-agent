@@ -123,7 +123,7 @@ documentation files were updated when it did.
 | The step changed no files | Nothing to document. |
 
 Reads `docs` from `pi.config.json` — see
-[Configuration](configuration.md), which also gives the precise rule for when a
+[Configuration](09-configuration.md), which also gives the precise rule for when a
 step owes documentation and how `exempt` patterns match.
 
 ### `type-check`
@@ -161,7 +161,7 @@ nobody is stopping you from approving code that does not compile.
 
 The guard enforces; sensors advise. Keeping them separate is a design decision
 rather than an accident, and the reasoning is in
-[Guards and advice](../concepts/guards-and-advice.md).
+[Guards and advice](../concepts/03-guards-and-advice.md).
 
 The short version: a sensor is a heuristic over prose. `upstream-coverage` looks
 for headings as substrings; `traceability` matches on word overlap. Heuristics
@@ -181,6 +181,6 @@ skip reason.
 
 ## See also
 
-- [Commands](commands.md) — `pi sensors` flags
-- [Configuration](configuration.md) — `checks` and `docs`
-- [Workflows](../extending/workflows.md) — declaring sensors on a step
+- [Commands](08-commands.md) — `pi sensors` flags
+- [Configuration](09-configuration.md) — `checks` and `docs`
+- [Workflows](../extending/11-workflows.md) — declaring sensors on a step

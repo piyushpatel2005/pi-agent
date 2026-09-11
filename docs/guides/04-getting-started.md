@@ -8,7 +8,7 @@ run against a small project called `orders`. Compare it against your terminal as
 you go.
 
 If you want to know what pi *is* before installing it, read
-[What pi is](../concepts/what-pi-is.md) first.
+[What pi is](../concepts/01-what-pi-is.md) first.
 
 ## Before you start
 
@@ -93,7 +93,7 @@ While you are in there, `checks` is worth filling in:
 Leave it empty and the `type-check` and `linter` sensors skip rather than guess
 at your build tooling — which means they never run and never tell you anything.
 
-Full key list: [Configuration](../reference/configuration.md).
+Full key list: [Configuration](../reference/09-configuration.md).
 
 ## Wire it into your editor
 
@@ -226,8 +226,8 @@ that loop when the work gets large or needs a decision.
 
 ## Where to go next
 
-[The run loop](the-run-loop.md) covers what each command does to the run, and
+[The run loop](05-the-run-loop.md) covers what each command does to the run, and
 what to do at an approval gate.
 
-[Reviews and budgets](reviews-and-budgets.md) is the one to read when you first
+[Reviews and budgets](06-reviews-and-budgets.md) is the one to read when you first
 get refused, which will happen on your first real implementation step.

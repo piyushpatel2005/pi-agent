@@ -64,6 +64,8 @@ import {
 import { EventType, type PiEvent } from "../core/schemas/events.ts";
 import { DirectiveKind, type Directive } from "../core/schemas/directive.ts";
 import { RunState, RunStatus, STATE_VERSION, StepStatus } from "../core/schemas/state.ts";
+import { serveStaticSite } from "../core/docs/serve.ts";
+import { buildStaticSite } from "../core/docs/site.ts";
 import { VERSION, versionInfo } from "../core/version.ts";
 
 type Args = {
@@ -1025,6 +1027,65 @@ function cmdRewind(workspace: Workspace, args: Args): number {
   return 0;
 }
 
+function cmdDocs(workspace: Workspace, args: Args): number {
+  const [subcommand] = args.positional;
+  const outDir = flagString(args, "out") ?? "dist/docs";
+  const docsDir = workspace.config.docs.dir;
+
+  if (subcommand === "build") {
+    const result = buildStaticSite(workspace.projectDir, outDir, docsDir);
+
+    if (result.pages.length === 0) {
+      console.error(
+        `No sequenced pages found under ${docsDir}/. ` +
+          `Name files with a two-digit prefix, e.g. 01-what-pi-is.md.`,
+      );
+      return 1;
+    }
+
+    console.log(`Built ${result.pages.length} page(s) to ${result.outDir}/`);
+    for (const page of result.pages) {
+      console.log(`  ${String(page.order).padStart(2, "0")}  ${page.sourcePath}`);
+    }
+    return 0;
+  }
+
+  if (subcommand === "serve") {
+    const host = flagString(args, "host") ?? "127.0.0.1";
+    const port = Number(flagString(args, "port") ?? "4173");
+    const skipBuild = args.flags.has("no-build");
+    const absoluteOut = join(workspace.projectDir, outDir);
+
+    if (!skipBuild) {
+      const result = buildStaticSite(workspace.projectDir, outDir, docsDir);
+      if (result.pages.length === 0) {
+        console.error(
+          `No sequenced pages found under ${docsDir}/. ` +
+            `Name files with a two-digit prefix, e.g. 01-what-pi-is.md.`,
+        );
+        return 1;
+      }
+      console.log(`Built ${result.pages.length} page(s) to ${result.outDir}/`);
+    }
+
+    serveStaticSite(absoluteOut, { host, port })
+      .then(() => {
+        console.log(`Serving ${absoluteOut} at http://${host}:${port}/`);
+        console.log("Press Ctrl+C to stop.");
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(message);
+        process.exit(1);
+      });
+
+    return 0;
+  }
+
+  console.error("Usage: pi docs build [--out <dir>] | pi docs serve [--port <n>] [--host <addr>] [--no-build]");
+  return 2;
+}
+
 function cmdDoctor(workspace: Workspace): number {
   let failures = 0;
   const ok = (message: string) => console.log(`ok    ${message}`);
@@ -1194,6 +1255,8 @@ Usage
   pi checkpoints                           list the boundaries you can rewind to
   pi rewind --to <step> [--yes]            move the run back to a boundary
   pi doctor                                check this project's setup
+  pi docs build [--out <dir>]              build a static site from sequenced docs
+  pi docs serve [--port <n>] [--host <a>]   build (unless --no-build) and serve locally
   pi version
 
 Results for --result: completed, needs-review, approved, rejected, failed`;
@@ -1264,6 +1327,9 @@ function main(argv: string[]): number {
       return cmdRewind(workspace, args);
     case "doctor":
       return cmdDoctor(workspace);
+    case "docs":
+    case "doc":
+      return cmdDocs(workspace, args);
     default:
       console.error(`Unknown command "${verb}".\n`);
       console.error(USAGE);

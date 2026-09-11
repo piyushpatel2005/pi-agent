@@ -3,7 +3,7 @@
 **This page answers one question: what does a harness solve that a coding agent
 alone does not?**
 
-If you already know why you want pi, skip to [Getting started](../guides/getting-started.md).
+If you already know why you want pi, skip to [Getting started](../guides/04-getting-started.md).
 
 ## The problem
 
@@ -87,14 +87,14 @@ Five things make up a pi installation. Each has its own page; this is the map.
 
 **Workflows** name the steps and their order. Four ship with pi — `feature`,
 `quick`, `bugfix`, and `docs` — and you can write your own or shadow a shipped
-one. See [Workflows](../extending/workflows.md).
+one. See [Workflows](../extending/11-workflows.md).
 
 **Personas** are the roles steps are assigned to. Eight ship with pi. Each
 declares what tools it may hold and carries the operating instructions handed to
-the model when a step activates it. See [Personas](../extending/personas.md).
+the model when a step activates it. See [Personas](../extending/12-personas.md).
 
 **The guard** is consulted before every tool call and can refuse it. This is the
-part with teeth. See [Guards and advice](guards-and-advice.md).
+part with teeth. See [Guards and advice](03-guards-and-advice.md).
 
 **Sensors** check a step's output when it reports itself done and report what
 they find at the gate. They never block. Also on the guards page.
@@ -102,12 +102,12 @@ they find at the gate. They never block. Also on the guards page.
 **The harness** is the thin layer that wires pi into a specific coding tool:
 hooks pointed at an adapter, a skill that teaches the loop, and permission to
 run `pi` without prompting. Cursor is the only one that exists today. See
-[Harnesses](../extending/harnesses.md).
+[Harnesses](../extending/13-harnesses.md).
 
 ## Where to go next
 
-If you want to see it work, [Getting started](../guides/getting-started.md) goes
+If you want to see it work, [Getting started](../guides/04-getting-started.md) goes
 from nothing to a finished first step in one transcript.
 
 If you want the vocabulary first — run, step, gate, artifact, receipt —
-[The run model](the-run-model.md) is the next page.
+[The run model](02-the-run-model.md) is the next page.

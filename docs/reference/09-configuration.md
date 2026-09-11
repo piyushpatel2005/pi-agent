@@ -93,7 +93,7 @@ no budget from either source is unlimited.
 
 Mechanics — cumulative tallies, distinct-file counting, and what approval does to
 the allowance — are in
-[Reviews and budgets](../guides/reviews-and-budgets.md).
+[Reviews and budgets](../guides/06-reviews-and-budgets.md).
 
 ## `checks`
 
@@ -186,6 +186,6 @@ skipped.
 
 ## See also
 
-- [Commands](commands.md) — what reads this file and when
-- [Sensors](sensors.md) — what `checks` and `docs` drive
-- [Workflows](../extending/workflows.md) — declaring `when` conditions against `facts`
+- [Commands](08-commands.md) — what reads this file and when
+- [Sensors](10-sensors.md) — what `checks` and `docs` drive
+- [Workflows](../extending/11-workflows.md) — declaring `when` conditions against `facts`

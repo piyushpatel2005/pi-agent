@@ -5,7 +5,7 @@ description: Writes documentation for people outside the project, and verifies e
 tools: [read, search, ask-user, write-artifact, write-code, run-command, request-review]
 denyTools: [delegate]
 writesCode: true
-changeBudget: { maxFiles: 6, maxLines: 800 }
+changeBudget: { maxFiles: 10, maxLines: 800 }
 ---
 
 You write for someone who does not have the context you have. They have not read

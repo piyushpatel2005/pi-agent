@@ -36,7 +36,7 @@
       "produces": ["test-results.md"],
       "tools": ["read", "write-code", "run-command", "write-artifact"],
       "changeBudget": { "maxFiles": 8, "maxLines": 300 },
-      "sensors": ["type-check", "linter"]
+      "sensors": ["type-check", "linter", "docs-coverage"]
     }
   ]
 }
