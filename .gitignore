@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+
+# Local run state produced while dogfooding pi on itself.
+pi/runs/
+.DS_Store

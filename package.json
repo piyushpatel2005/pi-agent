@@ -1,0 +1,21 @@
+{
+  "name": "pi-harness",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "A workflow harness for coding agents: personas, guarded tools, checkpoints, and traceability.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
