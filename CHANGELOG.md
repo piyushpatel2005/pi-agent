@@ -33,11 +33,20 @@ so when it does.
   project are kept, not overwritten.
 - `pi uninstall`, which takes pi back out: hooks, the `Shell(pi)` permission,
   the skill, and the rule. Hooks and permissions that are not pi's are left
-  alone, and `pi/` — config, workflows, and run history — is never touched.
+  alone. Files and directories left empty by the removal — `hooks.json`,
+  `cli.json`, `.cursor/skills/`, `.cursor/rules/`, and `.cursor/` itself — are
+  deleted rather than left as husks.
+- `pi uninstall --purge` additionally deletes `pi.config.json` and `pi/`,
+  reporting how many runs of history it is discarding. It works on a project
+  that has already been unwired.
 - `pi sensors`, six advisory checks that run when a step reports itself done and
   report to the human at the gate.
 - `pi checkpoints` and `pi rewind --to <step>`, to move a run back to an earlier
   boundary. Dry run by default; `--yes` applies it.
+- `pi runs` lists every run in the project, newest first, marking the active
+  one; `pi runs --use <id>` switches between them and accepts a short prefix.
+- `pi start` now says when it has set an unfinished run aside, and prints the
+  command to go back to it. It used to happen silently.
 - `pi doctor`, which checks the project's setup and the integrity of the run.
 - `pi version --json`, reporting the pi release alongside the state and config
   schema versions and the Node version — the things worth pasting into a bug

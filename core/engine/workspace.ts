@@ -16,6 +16,7 @@ import { join } from "node:path";
 
 import { TOOL_NAMES } from "../schemas/agent.ts";
 import { ProjectConfig, defaultConfig } from "../schemas/config.ts";
+import { RunState, RunStatus, StepStatus } from "../schemas/state.ts";
 import type { CompiledWorkflow } from "../schemas/workflow.ts";
 import { loadAgents, rosterContext, type AgentRoster } from "./agents.ts";
 import { compileWorkflow, type CompileContext, type WorkflowIssue } from "./compile.ts";
@@ -201,7 +202,7 @@ export function requireActiveRun(projectDir: string): { runId: string; paths: Ru
   return { runId, paths: runPaths(projectDir, runId) };
 }
 
-/** Every run in the project, newest first. */
+/** Every run id in the project, in no particular order. */
 export function listRuns(projectDir: string): string[] {
   const dir = runsDir(projectDir);
   if (!existsSync(dir)) return [];
@@ -210,4 +211,92 @@ export function listRuns(projectDir: string): string[] {
     .filter((entry) => entry.isDirectory() && existsSync(runPaths(projectDir, entry.name).state))
     .map((entry) => entry.name)
     .sort();
+}
+
+export type RunSummary = {
+  runId: string;
+  active: boolean;
+  goal: string;
+  workflow: string;
+  status: RunStatus;
+  createdAt: string;
+  updatedAt: string;
+  /** Steps finished out of the steps that apply to this project. */
+  done: number;
+  total: number;
+};
+
+/**
+ * Every run with enough of its state to describe it, newest first.
+ *
+ * Ordered by when each run started, which is what a person means by "newest" —
+ * the ids are random UUIDs, so sorting by name would be sorting by nothing.
+ * Runs whose state cannot be read are left out rather than shown as rubble;
+ * `pi doctor` is the place that reports damage.
+ */
+export function listRunSummaries(projectDir: string): RunSummary[] {
+  const active = activeRunId(projectDir);
+
+  return listRuns(projectDir)
+    .flatMap((runId) => {
+      const parsed = RunState.safeParse(
+        JSON.parse(readFileSync(runPaths(projectDir, runId).state, "utf-8")),
+      );
+      if (!parsed.success) return [];
+
+      const state = parsed.data;
+      const steps = Object.values(state.steps);
+      const applicable = steps.filter((step) => step.status !== StepStatus.Skipped);
+
+      return [
+        {
+          runId,
+          active: runId === active,
+          goal: state.goal,
+          workflow: state.workflow,
+          status: state.status,
+          createdAt: state.createdAt,
+          updatedAt: state.updatedAt,
+          done: applicable.filter((step) => step.status === StepStatus.Completed).length,
+          total: applicable.length,
+        },
+      ];
+    })
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+/**
+ * Find a run from a whole id or an unambiguous prefix.
+ *
+ * Run ids are UUIDs, and asking someone to type one exactly to switch between
+ * two runs would make the feature not worth having.
+ */
+export function resolveRunId(projectDir: string, wanted: string): string {
+  const runs = listRuns(projectDir);
+
+  if (runs.includes(wanted)) return wanted;
+
+  const matches = runs.filter((runId) => runId.startsWith(wanted));
+
+  if (matches.length === 1) return matches[0]!;
+
+  if (matches.length === 0) {
+    throw new WorkspaceError(
+      "no-such-run",
+      `No run here starts with "${wanted}". Run \`pi runs\` to see them.`,
+    );
+  }
+
+  throw new WorkspaceError(
+    "ambiguous-run",
+    `"${wanted}" matches ${matches.length} runs. Use more of the id:\n` +
+      matches.map((runId) => `  ${runId}`).join("\n"),
+  );
+}
+
+/** Is there a run in progress that a new one would push aside? */
+export function unfinishedActiveRun(projectDir: string): RunSummary | undefined {
+  return listRunSummaries(projectDir).find(
+    (run) => run.active && run.status === RunStatus.Active && run.done < run.total,
+  );
 }

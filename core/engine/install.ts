@@ -10,8 +10,18 @@
 // already has hooks and rules in it that have nothing to do with pi, and an
 // installer that flattens them would be worse than no installer.
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, relative } from "node:path";
+
+import { CONFIG_FILE } from "./workspace.ts";
 
 /** The root of the pi installation, resolved from this file. */
 export const PI_ROOT = join(import.meta.dirname, "..", "..");
@@ -213,7 +223,19 @@ export type UninstallResult = {
  * are yours; an uninstaller that deleted your audit trail would be one you
  * could not risk running.
  */
-export function uninstall(projectDir: string, harness: string): UninstallResult {
+export type UninstallOptions = {
+  /**
+   * Also delete `pi.config.json` and `pi/` — the project's configuration,
+   * its workflow overrides, and every run it has ever recorded.
+   */
+  purge?: boolean;
+};
+
+export function uninstall(
+  projectDir: string,
+  harness: string,
+  options: UninstallOptions = {},
+): UninstallResult {
   requireHarness(harness);
 
   const removed: string[] = [];
@@ -226,11 +248,53 @@ export function uninstall(projectDir: string, harness: string): UninstallResult 
   deleteIfPresent(join(cursorDir, "skills", "pi"), projectDir, removed);
   deleteIfPresent(join(cursorDir, "rules", "pi.mdc"), projectDir, removed);
 
-  if (existsSync(join(projectDir, "pi"))) {
-    notes.push("Left pi/ alone: your config, workflows, and run history live there.");
+  // Innermost first, so emptying `skills/` can leave `.cursor/` empty in turn.
+  pruneEmpty(
+    [join(cursorDir, "skills"), join(cursorDir, "rules"), cursorDir],
+    projectDir,
+    removed,
+  );
+
+  if (options.purge) purgeProject(projectDir, removed, notes);
+  else if (existsSync(join(projectDir, "pi")) || existsSync(join(projectDir, CONFIG_FILE))) {
+    notes.push(
+      `Left ${CONFIG_FILE} and pi/ alone: your config, workflows, and run ` +
+        "history live there. Use --purge to delete those too.",
+    );
   }
 
   return { removed, notes };
+}
+
+/**
+ * Delete the project's own pi files: config, workflows, and run history.
+ *
+ * Separated behind a flag rather than folded into the default because this is
+ * the one part of an uninstall that destroys something that cannot be made
+ * again. Hooks and skills can be rewritten by `pi install`; a run's audit trail
+ * cannot be rewritten by anything.
+ */
+function purgeProject(projectDir: string, removed: string[], notes: string[]): void {
+  const runs = countRuns(projectDir);
+
+  if (existsSync(join(projectDir, CONFIG_FILE))) {
+    rmSync(join(projectDir, CONFIG_FILE));
+    removed.push(CONFIG_FILE);
+  }
+
+  if (existsSync(join(projectDir, "pi"))) {
+    rmSync(join(projectDir, "pi"), { recursive: true });
+    removed.push(runs > 0 ? `pi/ (${runs} run(s) discarded)` : "pi/");
+  }
+
+  if (runs > 0) notes.push(`${runs} run(s) of history were deleted. That cannot be undone.`);
+}
+
+function countRuns(projectDir: string): number {
+  const dir = join(projectDir, "pi", "runs");
+  if (!existsSync(dir)) return 0;
+
+  return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length;
 }
 
 /**
@@ -302,11 +366,41 @@ function revokePermission(
   if (!allow.includes(grant)) return;
 
   const remaining = allow.filter((entry) => entry !== grant);
+
+  // Same rule as hooks.json: if the only thing in here was pi's grant, the file
+  // is pi's leftover and goes with it. An empty `{"permissions":{"allow":[]}}`
+  // is litter that outlives the tool that wrote it.
+  const otherPermissions = Object.keys(permissions).filter((key) => key !== "allow");
+  const otherKeys = Object.keys(existing).filter((key) => key !== "permissions");
+
+  if (remaining.length === 0 && otherPermissions.length === 0 && otherKeys.length === 0) {
+    rmSync(path);
+    removed.push(relative(projectDir, path));
+    return;
+  }
+
   writeJson(path, { ...existing, permissions: { ...permissions, allow: remaining } });
   removed.push(`${relative(projectDir, path)} (${grant} revoked)`);
 
   if (remaining.length > 0) {
     notes.push(`Left ${remaining.length} other permission(s) in place.`);
+  }
+}
+
+/**
+ * Delete a directory only if it is empty, and its parents while they are too.
+ *
+ * Removing pi's skill leaves `.cursor/skills/` behind, and removing everything
+ * leaves `.cursor/` behind. Neither belongs to pi once pi is gone, but neither
+ * is anyone else's either when there is nothing in it.
+ */
+function pruneEmpty(dirs: readonly string[], projectDir: string, removed: string[]): void {
+  for (const dir of dirs) {
+    if (!existsSync(dir)) continue;
+    if (readdirSync(dir).length > 0) continue;
+
+    rmSync(dir, { recursive: true });
+    removed.push(`${relative(projectDir, dir)}/`);
   }
 }
 

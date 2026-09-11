@@ -136,10 +136,11 @@ pi log         # everything that has happened
 | --- | --- |
 | `pi init` | Scaffold `pi.config.json` and `pi/workflows/` |
 | `pi install` | Wire pi into your coding tool's hooks |
-| `pi uninstall` | Take pi back out of the project again |
+| `pi uninstall` | Take pi back out; `--purge` drops config and history too |
 | `pi start "<goal>"` | Begin a run; `--workflow <id>` picks a non-default one |
 | `pi next` | The one thing to do now; `--json` for machine use |
 | `pi report --step <id> --result <r>` | Record an outcome |
+| `pi runs` | Every run in the project; `--use <id>` switches |
 | `pi status` | Progress against the workflow |
 | `pi log` | The event history; `--step <id>` to narrow |
 | `pi workflows [<id>]` | List workflows, or show one in detail |
@@ -409,16 +410,31 @@ layer is the seam between them, and it is deliberately thin — three things:
    `next` / work / `report` loop.
 3. **A permission** so running `pi` doesn't prompt on every call.
 
-`pi uninstall` reverses it, and only it: pi's hooks come out, `Shell(pi)` is
-revoked, and the skill and rule are deleted, while every hook and permission
-that was not pi's is left exactly where it was. An event whose only hook was
-pi's is removed rather than left as an empty array, and a `hooks.json` with
-nothing left in it goes too.
+`pi uninstall` reverses it: pi's hooks come out, `Shell(pi)` is revoked, and the
+skill and rule are deleted, while every hook and permission that was not pi's is
+left exactly where it was.
 
-What it deliberately does not touch is `pi/` — your config, workflows, and run
-history. Those are yours, and an uninstaller that deleted your audit trail would
-be one you could not risk running. Delete that directory yourself if you want it
-gone.
+It takes its empty husks with it. An event whose only hook was pi's loses the
+key rather than keeping an empty array; a `hooks.json` or `cli.json` with
+nothing but pi's entries in it is deleted; and `.cursor/skills/`,
+`.cursor/rules/`, and `.cursor/` itself go when they end up empty. If the
+project had anything else in any of them, all of it stays.
+
+By default it leaves `pi.config.json` and `pi/` — your config, workflow
+overrides, and run history:
+
+```bash
+pi uninstall            # unwire pi; keep the config and the history
+pi uninstall --purge    # also delete pi.config.json and pi/
+```
+
+`--purge` is a separate flag because it is the only part of an uninstall that
+destroys something nothing can recreate. Hooks and skills can be written again
+by `pi install`; a run's audit trail cannot be written again by anything. It
+tells you how many runs it is discarding before it does.
+
+`--purge` also works on a project that has already been unwired, which is the
+order most people actually follow.
 
 `pi install` writes all three, merging into your existing `.cursor/` config
 rather than replacing it. Reinstalling is safe and idempotent; it also cleans up
@@ -458,6 +474,33 @@ else — the engine, personas, and workflows are host-neutral.
 `state.json` is a cache the engine can answer guard questions from quickly;
 `events.ndjson` is the record of what actually happened. `pi/runs/` should be
 gitignored.
+
+## More than one run
+
+Every `pi start` creates a run of its own, with its own state, log, artifacts,
+and checkpoints. Starting the next feature is just `pi start` again — there is
+nothing to finish or clean up first.
+
+```bash
+pi runs                    # every run, newest first, * marks the active one
+pi runs --use 80ee903f     # switch to one; a short prefix is enough
+```
+
+Starting a run while another is unfinished sets the old one aside rather than
+refusing, because that is usually what you meant. It says so, and tells you how
+to get back:
+
+```
+Started Quick change — Feature B
+Run 52a5831b-01ae-4012-84bb-233060869613
+
+Set aside: Feature A (1/3 steps)
+  Nothing was lost. Go back with: pi runs --use 80ee903f
+```
+
+Nothing is ever deleted by starting or switching. `pi/runs/active` is a single
+pointer, and moving it is all a switch does; the run you left picks up at the
+step it had reached.
 
 ## Checkpoints and rewinding
 

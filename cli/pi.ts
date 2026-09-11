@@ -50,11 +50,14 @@ import {
   CONFIG_FILE,
   WorkspaceError,
   activeRunId,
+  listRunSummaries,
   listRuns,
   openWorkspace,
+  resolveRunId,
   requireActiveRun,
   requireWorkflow,
   setActiveRun,
+  unfinishedActiveRun,
   type Workspace,
 } from "../core/engine/workspace.ts";
 import { EventType, type PiEvent } from "../core/schemas/events.ts";
@@ -151,6 +154,44 @@ function cmdInit(projectDir: string, args: Args): number {
   return 0;
 }
 
+function cmdRuns(workspace: Workspace, args: Args): number {
+  const wanted = flagString(args, "use");
+
+  if (wanted) {
+    const runId = resolveRunId(workspace.projectDir, wanted);
+    setActiveRun(workspace.projectDir, runId);
+
+    const run = listRunSummaries(workspace.projectDir).find((entry) => entry.runId === runId);
+    console.log(`Switched to ${runId}`);
+    if (run) console.log(`  ${run.goal} — ${run.done}/${run.total} steps`);
+    console.log("");
+    console.log("Run `pi next` to pick it back up.");
+    return 0;
+  }
+
+  const runs = listRunSummaries(workspace.projectDir);
+
+  if (wantsJson(args)) {
+    console.log(JSON.stringify(runs, null, 2));
+    return 0;
+  }
+
+  if (runs.length === 0) {
+    console.log('No runs yet. Start one with `pi start "<what you want to build>"`.');
+    return 0;
+  }
+
+  for (const run of runs) {
+    const mark = run.active ? "*" : " ";
+    console.log(`${mark} ${run.runId.slice(0, 8)}  ${run.status.padEnd(9)} ${run.done}/${run.total}  ${run.goal}`);
+    console.log(`             ${run.workflow}, started ${run.createdAt.slice(0, 10)}`);
+  }
+
+  console.log("");
+  console.log("* is the active run. Switch with `pi runs --use <id>`.");
+  return 0;
+}
+
 function cmdInstall(workspace: Workspace, args: Args): number {
   const harness = flagString(args, "harness") ?? workspace.config.harness;
   const result = install(workspace.projectDir, harness);
@@ -172,21 +213,35 @@ function cmdUninstall(workspace: Workspace, args: Args): number {
   // harness pi has.
   requireHarness(harness);
 
-  if (!isInstalled(workspace.projectDir, harness)) {
+  const purge = args.flags.get("purge") === true;
+
+  // `--purge` still has work to do after the wiring is already gone — that is
+  // exactly the sequence someone follows when they uninstall, then decide they
+  // want the config and history gone too.
+  if (!isInstalled(workspace.projectDir, harness) && !purge) {
     console.log(`pi is not wired into ${harness} in this project; nothing to undo.`);
+    console.log(`Use --purge to also delete ${CONFIG_FILE} and pi/.`);
     return 0;
   }
 
-  const result = uninstall(workspace.projectDir, harness);
+  const result = uninstall(workspace.projectDir, harness, { purge });
 
-  console.log(`Removed pi from ${harness}:`);
+  if (result.removed.length === 0) {
+    console.log("Nothing of pi's was found in this project.");
+    return 0;
+  }
+
+  const unwired = result.removed.some((file) => file.startsWith(".cursor"));
+
+  console.log(unwired ? `Removed pi from ${harness}:` : "Removed pi's files:");
   for (const file of result.removed) console.log(`  ${file}`);
   for (const note of result.notes) console.log(`\n  note: ${note}`);
 
   console.log("");
-  console.log("Restart Cursor so it stops calling the hooks.");
-  console.log("Re-wire it any time with `pi install`; to remove the run history");
-  console.log("as well, delete the pi/ directory yourself.");
+  // Only worth saying when hooks actually came out; a bare --purge changes
+  // nothing Cursor is holding on to.
+  if (unwired) console.log(`Restart ${harness} so it stops calling the hooks.`);
+  if (!purge) console.log("Re-wire it any time with `pi install`.");
   return 0;
 }
 
@@ -199,6 +254,11 @@ function cmdStart(workspace: Workspace, args: Args): number {
 
   const workflowId = flagString(args, "workflow") ?? workspace.config.defaultWorkflow;
   const workflow = requireWorkflow(workspace, workflowId);
+
+  // Starting a run pushes the current one aside. That is usually what you meant,
+  // so it is not refused — but it happened silently before, and a half-finished
+  // run quietly disappearing is not something to find out about later.
+  const displaced = unfinishedActiveRun(workspace.projectDir);
 
   const runId = randomUUID();
   const paths = runPaths(workspace.projectDir, runId);
@@ -232,12 +292,24 @@ function cmdStart(workspace: Workspace, args: Args): number {
   );
 
   if (wantsJson(args)) {
-    console.log(JSON.stringify({ runId, workflow: workflow.id, goal }, null, 2));
+    console.log(
+      JSON.stringify(
+        { runId, workflow: workflow.id, goal, displaced: displaced?.runId ?? null },
+        null,
+        2,
+      ),
+    );
     return 0;
   }
 
   console.log(`Started ${workflow.name} — ${goal}`);
   console.log(`Run ${runId}`);
+
+  if (displaced) {
+    console.log("");
+    console.log(`Set aside: ${displaced.goal} (${displaced.done}/${displaced.total} steps)`);
+    console.log(`  Nothing was lost. Go back with: pi runs --use ${displaced.runId.slice(0, 8)}`);
+  }
   if (skipped.length > 0) {
     console.log("");
     console.log("Not applicable to this project (from pi.config.json facts):");
@@ -1086,8 +1158,9 @@ const USAGE = `pi — a workflow harness for coding agents
 Usage
   pi init [--harness <name>] [--force]     scaffold pi.config.json in this project
   pi install [--harness <name>]            wire pi into your coding tool's hooks
-  pi uninstall [--harness <name>]          take pi back out again
+  pi uninstall [--purge]                   take pi back out; --purge drops config+history
   pi start "<goal>" [--workflow <id>]      begin a run
+  pi runs [--use <id>] [--json]            list runs, or switch to one
   pi status [--json]                       where the active run is
   pi next [--brief] [--json]               what to do now; --brief for the full prompt
   pi report --step <id> --result <r>       record the outcome of a step
@@ -1160,6 +1233,9 @@ function main(argv: string[]): number {
       return cmdGuard(workspace, args);
     case "review":
       return cmdReview(workspace, args);
+    case "runs":
+    case "run":
+      return cmdRuns(workspace, args);
     case "status":
       return cmdStatus(workspace, args);
     case "log":

@@ -73,8 +73,7 @@ describe("pi uninstall", () => {
     assert.equal(existsSync(join(dir, ".cursor", "skills", "pi")), false);
     assert.equal(existsSync(join(dir, ".cursor", "rules", "pi.mdc")), false);
     assert.equal(existsSync(hooksPath(dir)), false, "a bare hooks.json goes with it");
-
-    assert.deepEqual(allowed(dir), []);
+    assert.equal(existsSync(join(dir, ".cursor", "cli.json")), false, "and a bare cli.json");
   });
 
   test("doctor stops reporting the project as wired", () => {
@@ -110,15 +109,88 @@ describe("pi uninstall", () => {
     assert.match(err, /No harness "emacs"/);
   });
 
+  test("takes the empty husks with it, rather than leaving them behind", () => {
+    const dir = project();
+
+    pi(dir, "uninstall");
+
+    // pi wrote every one of these, so when its own entries are gone there is
+    // nothing left for them to hold. An empty `{"permissions":{"allow":[]}}`
+    // outliving the tool that wrote it is litter.
+    assert.equal(existsSync(join(dir, ".cursor", "cli.json")), false);
+    assert.equal(existsSync(join(dir, ".cursor", "skills")), false);
+    assert.equal(existsSync(join(dir, ".cursor", "rules")), false);
+    assert.equal(existsSync(join(dir, ".cursor")), false, "an empty .cursor/ goes too");
+  });
+
+  test("keeps .cursor when the project has anything else in it", () => {
+    const dir = project();
+    writeFileSync(join(dir, ".cursor", "theirs.json"), "{}", "utf-8");
+
+    pi(dir, "uninstall");
+
+    assert.equal(existsSync(join(dir, ".cursor")), true);
+    assert.equal(existsSync(join(dir, ".cursor", "theirs.json")), true);
+  });
+
   test("leaves pi/ alone, history and all", () => {
     const dir = project();
     assert.equal(pi(dir, "start", "Add orders", "--workflow", "feature").code, 0);
 
     const { out } = pi(dir, "uninstall");
-    assert.match(out, /Left pi\/ alone/);
+    assert.match(out, /Left pi\.config\.json and pi\/ alone/);
 
     assert.equal(existsSync(join(dir, "pi.config.json")), true);
     assert.equal(existsSync(join(dir, "pi", "runs")), true);
+  });
+});
+
+describe("pi uninstall --purge", () => {
+  test("takes the config and the history too", () => {
+    const dir = project();
+    assert.equal(pi(dir, "start", "Add orders", "--workflow", "feature").code, 0);
+
+    const { code, out } = pi(dir, "uninstall", "--purge");
+    assert.equal(code, 0, out);
+    assert.match(out, /pi\.config\.json/);
+    assert.match(out, /pi\/ \(1 run\(s\) discarded\)/);
+    assert.match(out, /cannot be undone/);
+
+    assert.equal(existsSync(join(dir, "pi.config.json")), false);
+    assert.equal(existsSync(join(dir, "pi")), false);
+    assert.equal(existsSync(join(dir, ".cursor")), false);
+  });
+
+  test("works after a plain uninstall has already unwired it", () => {
+    // The order someone actually follows: unwire, then decide the rest can go.
+    const dir = project();
+    assert.equal(pi(dir, "uninstall").code, 0);
+    assert.equal(existsSync(join(dir, "pi.config.json")), true);
+
+    const { code, out } = pi(dir, "uninstall", "--purge");
+    assert.equal(code, 0, out);
+    assert.equal(existsSync(join(dir, "pi.config.json")), false);
+
+    // No hooks came out this time, so it should not talk about hooks.
+    assert.doesNotMatch(out, /Restart/);
+  });
+
+  test("says so when there is genuinely nothing left", () => {
+    const dir = project();
+    pi(dir, "uninstall", "--purge");
+
+    const { code, out } = pi(dir, "uninstall", "--purge");
+    assert.equal(code, 0);
+    assert.match(out, /Nothing of pi's was found/);
+  });
+
+  test("without --purge, points at the flag rather than staying silent", () => {
+    const dir = project();
+    pi(dir, "uninstall");
+
+    const { out } = pi(dir, "uninstall");
+    assert.match(out, /nothing to undo/);
+    assert.match(out, /--purge/);
   });
 });
 
