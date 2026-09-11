@@ -11,7 +11,13 @@ import { join } from "node:path";
 
 import { renderBrief, requireAgent } from "../core/engine/agents.ts";
 import { createEventLog } from "../core/engine/event-log.ts";
-import { InstallError, install, isInstalled } from "../core/engine/install.ts";
+import {
+  InstallError,
+  install,
+  isInstalled,
+  requireHarness,
+  uninstall,
+} from "../core/engine/install.ts";
 import {
   Permission,
   denialEvent,
@@ -156,6 +162,31 @@ function cmdInstall(workspace: Workspace, args: Args): number {
   console.log("");
   console.log("Restart Cursor so it picks up the hooks, then:");
   console.log('  pi start "<what you want to build>"');
+  return 0;
+}
+
+function cmdUninstall(workspace: Workspace, args: Args): number {
+  const harness = flagString(args, "harness") ?? workspace.config.harness;
+  // Before asking whether it is installed: "emacs is not wired in" is a true
+  // sentence and a useless one when the real answer is that emacs is not a
+  // harness pi has.
+  requireHarness(harness);
+
+  if (!isInstalled(workspace.projectDir, harness)) {
+    console.log(`pi is not wired into ${harness} in this project; nothing to undo.`);
+    return 0;
+  }
+
+  const result = uninstall(workspace.projectDir, harness);
+
+  console.log(`Removed pi from ${harness}:`);
+  for (const file of result.removed) console.log(`  ${file}`);
+  for (const note of result.notes) console.log(`\n  note: ${note}`);
+
+  console.log("");
+  console.log("Restart Cursor so it stops calling the hooks.");
+  console.log("Re-wire it any time with `pi install`; to remove the run history");
+  console.log("as well, delete the pi/ directory yourself.");
   return 0;
 }
 
@@ -1055,6 +1086,7 @@ const USAGE = `pi — a workflow harness for coding agents
 Usage
   pi init [--harness <name>] [--force]     scaffold pi.config.json in this project
   pi install [--harness <name>]            wire pi into your coding tool's hooks
+  pi uninstall [--harness <name>]          take pi back out again
   pi start "<goal>" [--workflow <id>]      begin a run
   pi status [--json]                       where the active run is
   pi next [--brief] [--json]               what to do now; --brief for the full prompt
@@ -1108,6 +1140,8 @@ function main(argv: string[]): number {
   switch (verb) {
     case "install":
       return cmdInstall(workspace, args);
+    case "uninstall":
+      return cmdUninstall(workspace, args);
     case "start":
       return cmdStart(workspace, args);
     case "next":

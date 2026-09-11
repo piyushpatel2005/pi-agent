@@ -52,7 +52,11 @@ pi --help
 To install without linking, `npm install -g .` from the clone works the same
 way. To use it without installing at all, run `node /path/to/pi/cli/pi.ts`.
 
-Uninstall with `npm unlink -g pi-harness`.
+There are two separate things you can uninstall, and they are worth keeping
+apart. `pi uninstall` unwires pi from *one project*; `npm unlink -g pi-harness`
+removes the `pi` command from your machine. Doing the second without the first
+leaves hooks in your projects pointing at a command that is no longer there, so
+unwire the projects first.
 
 ### A specific version
 
@@ -132,6 +136,7 @@ pi log         # everything that has happened
 | --- | --- |
 | `pi init` | Scaffold `pi.config.json` and `pi/workflows/` |
 | `pi install` | Wire pi into your coding tool's hooks |
+| `pi uninstall` | Take pi back out of the project again |
 | `pi start "<goal>"` | Begin a run; `--workflow <id>` picks a non-default one |
 | `pi next` | The one thing to do now; `--json` for machine use |
 | `pi report --step <id> --result <r>` | Record an outcome |
@@ -403,6 +408,17 @@ layer is the seam between them, and it is deliberately thin — three things:
 2. **A skill** (`.cursor/skills/pi/SKILL.md`) telling the agent how to drive the
    `next` / work / `report` loop.
 3. **A permission** so running `pi` doesn't prompt on every call.
+
+`pi uninstall` reverses it, and only it: pi's hooks come out, `Shell(pi)` is
+revoked, and the skill and rule are deleted, while every hook and permission
+that was not pi's is left exactly where it was. An event whose only hook was
+pi's is removed rather than left as an empty array, and a `hooks.json` with
+nothing left in it goes too.
+
+What it deliberately does not touch is `pi/` — your config, workflows, and run
+history. Those are yours, and an uninstaller that deleted your audit trail would
+be one you could not risk running. Delete that directory yourself if you want it
+gone.
 
 `pi install` writes all three, merging into your existing `.cursor/` config
 rather than replacing it. Reinstalling is safe and idempotent; it also cleans up

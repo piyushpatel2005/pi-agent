@@ -31,6 +31,9 @@ so when it does.
   a tool call before it runs.
 - `pi install`, which wires pi into Cursor's hooks. Existing hooks in the
   project are kept, not overwritten.
+- `pi uninstall`, which takes pi back out: hooks, the `Shell(pi)` permission,
+  the skill, and the rule. Hooks and permissions that are not pi's are left
+  alone, and `pi/` — config, workflows, and run history — is never touched.
 - `pi sensors`, six advisory checks that run when a step reports itself done and
   report to the human at the gate.
 - `pi checkpoints` and `pi rewind --to <step>`, to move a run back to an earlier

@@ -10,8 +10,8 @@
 // already has hooks and rules in it that have nothing to do with pi, and an
 // installer that flattens them would be worse than no installer.
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 
 /** The root of the pi installation, resolved from this file. */
 export const PI_ROOT = join(import.meta.dirname, "..", "..");
@@ -33,13 +33,21 @@ export class InstallError extends Error {
 export const HARNESSES = ["cursor"] as const;
 export type Harness = (typeof HARNESSES)[number];
 
-export function install(projectDir: string, harness: string): InstallResult {
-  if (harness !== "cursor") {
-    throw new InstallError(
-      `No harness "${harness}". Available: ${HARNESSES.join(", ")}.`,
-    );
+/**
+ * Reject a harness pi cannot project into.
+ *
+ * Called before anything else looks at the project, so that a typo in the name
+ * is reported as a typo. Answering a question about "emacs" as though the
+ * harness existed would be worse than refusing it.
+ */
+export function requireHarness(harness: string): void {
+  if (!(HARNESSES as readonly string[]).includes(harness)) {
+    throw new InstallError(`No harness "${harness}". Available: ${HARNESSES.join(", ")}.`);
   }
+}
 
+export function install(projectDir: string, harness: string): InstallResult {
+  requireHarness(harness);
   return installCursor(projectDir);
 }
 
@@ -185,6 +193,128 @@ function readJson(path: string): Record<string, unknown> | null {
 function writeJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
+}
+
+// ── Uninstalling ────────────────────────────────────────────────────────────
+
+export type UninstallResult = {
+  /** Files changed or deleted, relative to the project. */
+  removed: string[];
+  /** Things the user should know: what was kept, and what was left behind. */
+  notes: string[];
+};
+
+/**
+ * Take pi back out of a project's configuration.
+ *
+ * The exact inverse of `install`, and no more than that. It removes the hooks,
+ * the permission, the skill, and the rule — the files pi wrote and can write
+ * again. It does not touch `pi/`, because config, workflows, and run history
+ * are yours; an uninstaller that deleted your audit trail would be one you
+ * could not risk running.
+ */
+export function uninstall(projectDir: string, harness: string): UninstallResult {
+  requireHarness(harness);
+
+  const removed: string[] = [];
+  const notes: string[] = [];
+  const cursorDir = join(projectDir, ".cursor");
+
+  unmergeHooks(join(cursorDir, "hooks.json"), projectDir, removed, notes);
+  revokePermission(join(cursorDir, "cli.json"), projectDir, removed, notes);
+
+  deleteIfPresent(join(cursorDir, "skills", "pi"), projectDir, removed);
+  deleteIfPresent(join(cursorDir, "rules", "pi.mdc"), projectDir, removed);
+
+  if (existsSync(join(projectDir, "pi"))) {
+    notes.push("Left pi/ alone: your config, workflows, and run history live there.");
+  }
+
+  return { removed, notes };
+}
+
+/**
+ * Strip pi's hooks out, leaving every other hook exactly where it was.
+ *
+ * Install merges into this file rather than owning it, so uninstall has to
+ * unpick rather than delete. Removing a project's unrelated hooks because pi
+ * happened to share the file would be unforgivable.
+ */
+function unmergeHooks(
+  path: string,
+  projectDir: string,
+  removed: string[],
+  notes: string[],
+): void {
+  const existing = readJson(path);
+  if (!existing) return;
+
+  const hooks = (existing.hooks as Record<string, HookEntry[]>) ?? {};
+  let dropped = 0;
+  let kept = 0;
+
+  for (const [event, entries] of Object.entries(hooks)) {
+    if (!Array.isArray(entries)) continue;
+
+    const foreign = entries.filter((entry) => !isOurs(entry));
+    dropped += entries.length - foreign.length;
+    kept += foreign.length;
+
+    // An event with nothing left in it is removed entirely, rather than left as
+    // an empty array for someone to wonder about later.
+    if (foreign.length === 0) delete hooks[event];
+    else hooks[event] = foreign;
+  }
+
+  if (dropped === 0) return;
+
+  const rest = { ...existing };
+  delete rest.hooks;
+  delete rest.version;
+
+  // If all that is left is the empty shell pi created, take the file with it.
+  // If the project had anything else in there, keep the file and just rewrite.
+  if (Object.keys(hooks).length === 0 && Object.keys(rest).length === 0) {
+    rmSync(path);
+    removed.push(relative(projectDir, path));
+  } else {
+    writeJson(path, { ...existing, hooks });
+    removed.push(`${relative(projectDir, path)} (${dropped} pi hook(s) removed)`);
+  }
+
+  if (kept > 0) notes.push(`Kept ${kept} hook(s) that were not pi's.`);
+}
+
+/** Take back the `Shell(pi)` grant, and nothing else in the file. */
+function revokePermission(
+  path: string,
+  projectDir: string,
+  removed: string[],
+  notes: string[],
+): void {
+  const existing = readJson(path);
+  if (!existing) return;
+
+  const permissions = (existing.permissions as Record<string, unknown>) ?? {};
+  const allow = Array.isArray(permissions.allow) ? (permissions.allow as string[]) : [];
+
+  const grant = "Shell(pi)";
+  if (!allow.includes(grant)) return;
+
+  const remaining = allow.filter((entry) => entry !== grant);
+  writeJson(path, { ...existing, permissions: { ...permissions, allow: remaining } });
+  removed.push(`${relative(projectDir, path)} (${grant} revoked)`);
+
+  if (remaining.length > 0) {
+    notes.push(`Left ${remaining.length} other permission(s) in place.`);
+  }
+}
+
+function deleteIfPresent(path: string, projectDir: string, removed: string[]): void {
+  if (!existsSync(path)) return;
+
+  rmSync(path, { recursive: true, force: true });
+  removed.push(relative(projectDir, path));
 }
 
 /** Is pi wired into this project's Cursor configuration? */
