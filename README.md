@@ -154,43 +154,18 @@ pi log         # everything that has happened
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `pi init` | Scaffold `pi.config.json` and `pi/workflows/` |
-| `pi install` | Wire pi into your coding tool's hooks |
-| `pi uninstall` | Take pi back out; `--purge` drops config and history too |
-| `pi start "<goal>"` | Begin a run; `--workflow <id>` picks a non-default one |
-| `pi next` | The one thing to do now; `--json` for machine use |
-| `pi report --step <id> --result <r>` | Record an outcome |
-| `pi runs` | Every run in the project; `--use <id>` switches |
-| `pi status` | Progress against the workflow |
-| `pi log` | The event history; `--step <id>` to narrow |
-| `pi workflows [<id>]` | List workflows, or show one in detail |
-| `pi agents [<id>]` | List personas, or show one in detail |
-| `pi sensors` | Dry-run the current step's checks |
-| `pi review request` | Stop and ask for review of a change |
-| `pi review resolve` | Answer the open review |
-| `pi review status` | Reviews on the current step |
-| `pi checkpoints` | The boundaries you can rewind to |
-| `pi rewind --to <step>` | Move the run back to a boundary |
-| `pi guard --tool <id>` | May this call proceed? (for harness hooks) |
-| `pi human-turn` | Record that a human acted (gates require this) |
-| `pi doctor` | Check this project's setup |
-| `pi version` | The release; `--json` adds schema and Node versions |
+The loop is three commands:
 
-Results for `--report`: `completed`, `needs-review`, `approved`, `rejected`,
-`failed`. Exit codes are `0` success, `1` error, `2` bad usage.
+```bash
+pi next                                     # what to do now
+# ... the work ...
+pi report --step <id> --result completed    # what happened
+```
 
-Every verb also accepts an `engine` prefix (`pi engine next`), which is the form
-the harness layer uses.
-
-### About `pi human-turn`
-
-Approval gates need evidence that a person was actually there. `pi report
---result approved` mints that evidence automatically when you run it from an
-interactive terminal. When a harness drives `pi` non-interactively, the harness
-hook calls `pi human-turn` on the user's real messages instead. Either way, an
-agent running unattended cannot manufacture its own approval.
+`pi --help` lists every command and flag.
+**[Commands](docs/reference/commands.md)** documents what each one requires of
+the run, what it produces, and what it refuses — including the step state
+machine.
 
 ## Small, reviewed changes
 
@@ -202,24 +177,8 @@ may change:
 ```
 
 The guard is consulted before every tool call and refuses the one that would
-cross the limit, with a message naming the way forward:
-
-```
-This change would put step "backend-implementation" at 310 lines against a
-limit of 300.
-
-The limit exists so that changes arrive in pieces a person can actually read.
-Stop here, summarize what you have done so far, and ask for review:
-
-  pi review request --summary "<what you changed and why>" --files <paths>
-```
-
-The tally is cumulative across the step, so splitting one change into smaller
-calls doesn't get around it. Distinct files are counted, so rewriting the same
-file five times is one file.
-
-When the agent requests review, **the step freezes** — no further changes are
-accepted until you answer, so the diff can't move underneath you:
+cross the limit, naming the way forward. When review is requested **the step
+freezes**, so the diff can't move underneath you:
 
 ```bash
 pi review status              # what you owe an answer on
@@ -228,17 +187,15 @@ pi review resolve --reject --feedback "Split the write path"
 ```
 
 **Approval starts the budget fresh; it does not raise the ceiling.** So the
-budget means "review every N files", not "N files per step, ever". Rejection
-resumes the step with your feedback attached.
-
-`requireReviewBefore: ["write-code"]` forces a review before the *first* write
-of a step, however small — for when you want to see the plan, not just the
-overflow.
+budget means "review every N files", not "N files per step, ever".
 
 Three things keep a receipt from being theatre: it fingerprints what you read
 (so an approval can't be retargeted at different work), the state store refuses
 any edit to it after the fact, and resolving requires a recorded human turn, so
 an unattended run can't approve its own work.
+
+**[Reviews and budgets](docs/guides/reviews-and-budgets.md)** has every refusal
+message, the exact budget mechanics, and what to do about each.
 
 ## Sensors
 
@@ -250,19 +207,14 @@ which ones it wants:
 "sensors": ["required-sections", "docs-coverage", "type-check", "linter"]
 ```
 
-| Sensor | Asks |
-| --- | --- |
-| `required-sections` | Do the declared artifacts exist, have content, and contain no leftover `TBD`? |
-| `upstream-coverage` | Does the output engage with the inputs the step was given? |
-| `traceability` | Is every acceptance criterion accounted for in the validation? |
-| `docs-coverage` | Did code changes arrive with the documentation they imply? |
-| `type-check` | Does `checks.typeCheck` pass? |
-| `linter` | Does `checks.lint` pass? |
+There are six, covering artifact quality, whether a step engaged with its
+inputs, acceptance-criteria traceability, documentation coverage, and your
+project's own type checker and linter.
 
 Preview them before you reach the gate:
 
 ```bash
-pi sensors              # dry-run the current step
+pi sensors              # dry-run the current step, with skip reasons
 pi sensors --list       # the catalogue
 ```
 
@@ -273,23 +225,16 @@ documentation" is a judgement that will sometimes be wrong. A guard that's
 sometimes wrong trains people to route around guards; a report that's sometimes
 wrong costs a glance.
 
-Two related rules follow from that. A sensor that **can't** check something
-reports `skip` with the reason rather than passing — otherwise green would mean
-two different things. And a sensor that throws is reported as a broken sensor,
-never as a failing step.
+One consequence to know: a sensor that **can't** check something skips, and at a
+gate a skip prints nothing at all — indistinguishable from a clean pass. `pi
+sensors` is what shows you the difference.
 
-`type-check` and `linter` run commands you configure, and skip when you haven't:
-
-```json
-"checks": {
-  "typeCheck": "npm run typecheck",
-  "lint": "npm run lint"
-}
-```
+**[Sensors](docs/reference/sensors.md)** covers what each one checks and exactly
+when it skips.
 
 ## Personas
 
-Seven roles, each a Markdown file in `core/agents/`. See them with `pi agents`,
+Eight roles, each a Markdown file in `core/agents/`. See them with `pi agents`,
 or read one in full with `pi agents backend-developer`.
 
 | Persona | Owns | Writes code |
@@ -374,48 +319,15 @@ so persona files stay about the role.
 Every key has a working default, so a repo with no `pi.config.json` at all
 still runs. The file exists to say the things only your repo knows.
 
-| Key | Default | What it does |
-| --- | --- | --- |
-| `version` | `1` | Config schema version. Bumped only by a migration |
-| `harness` | `"cursor"` | Which coding tool this project is wired for |
-| `defaultWorkflow` | `"feature"` | Used when `pi start` gets no `--workflow` |
-| `facts` | `{}` | Booleans that workflow `when` conditions resolve against |
-| `docs.dir` | `"docs"` | Directory holding long-form documentation |
-| `docs.files` | `["README.md"]` | Documentation files outside `dir` |
-| `docs.required` | `true` | Whether a step that changed source owes a doc update |
-| `docs.exempt` | `["tests/", "test/", "**/*.test.*", "dist/"]` | Paths that never owe one |
-| `changeBudget.maxFiles` | unset | Project-wide ceiling on files per step |
-| `changeBudget.maxLines` | unset | Project-wide ceiling on lines per step |
-| `checks.typeCheck` | unset | Command the `type-check` sensor runs |
-| `checks.lint` | unset | Command the `linter` sensor runs |
+**`facts`** is a closed set of booleans, not free-form. A workflow author can
+say "only when there is a frontend" but cannot embed logic the engine is unable
+to explain back to you. A step whose condition is false is marked skipped at the
+start of the run, so you see up front what won't happen. **A fact you leave out
+counts as false**, so an empty `facts` block silently skips every conditional
+step — `pi status` after `pi start` is worth a look.
 
-**`facts`** is a closed set, not free-form. A workflow author can say "only when
-there is a frontend" but cannot embed logic the engine is unable to explain back
-to you. The four:
-
-| Fact | Meaning |
-| --- | --- |
-| `hasFrontend` | The change has a user interface |
-| `hasBackend` | The change has server-side work |
-| `needsInfra` | Deployment or infrastructure work is in scope |
-| `isBrownfield` | Existing code, not a greenfield start |
-
-A step whose condition is false is marked skipped at the start of the run, so
-you see up front what won't happen. **A fact you leave out counts as false**, so
-an empty `facts` block silently skips every conditional step — `pi status` after
-`pi start` is worth a look.
-
-**`docs`** is configuration rather than persona prose on purpose. "Update the
-docs" written into an agent's instructions is unenforceable and drifts per repo.
-Declared here it becomes one generated sentence in the agent's brief, one
-`docs-coverage` sensor reading after the step, and one place to change when a
-repo keeps its docs in `website/content`.
-
-**`changeBudget`** is inherited by every step; a step's own budget still wins
-when it is stricter.
-
-**`checks`** commands are skipped rather than guessed at when absent. A sensor
-that silently checked nothing would report green for the wrong reason.
+**[Configuration](docs/reference/configuration.md)** documents every key, its
+default, the canonical fact names, and how the `docs` policy is applied.
 
 ### Keeping pi out of your commits
 
@@ -425,7 +337,7 @@ that silently checked nothing would report green for the wrong reason.
 # >>> pi >>>
 # Written by `pi install`, removed by `pi uninstall`.
 # Delete this block by hand once the team decides to commit pi's config.
-/pi/
+/pi/runs/
 /pi.config.json
 /.cursor/skills/pi/
 /.cursor/rules/pi.mdc
