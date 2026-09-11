@@ -478,6 +478,40 @@ gate. Cursor mints one on `beforeSubmitPrompt`; a headless run (`agent -p`)
 mints none, so an unattended model cannot approve its own work. Straight from
 AI-DLC's presence gate.
 
+### 8.4 The documentation contract
+
+"Update the docs" written into a persona file is unenforceable and drifts per
+repo. `pi` treats it the same way it treats review — declared as configuration,
+delivered as instruction, checked deterministically.
+
+**Declared** in `pi.config.json`, so a repo that keeps prose somewhere unusual
+says so once:
+
+```json
+{
+  "docs": {
+    "dir": "docs",
+    "files": ["README.md"],
+    "required": true,
+    "exempt": ["tests/", "**/*.test.*", "dist/"]
+  }
+}
+```
+
+**Delivered** by `renderDocsInstruction(config.docs)`, which generates the
+sentence injected into a code-writing persona's brief. The persona file never
+names a path, so relocating docs to `website/content/` updates every agent at
+once.
+
+**Checked** by the `docs-coverage` sensor at step completion: a step that
+changed non-exempt source and touched no documentation surface is flagged.
+Advisory by default (it reports at the gate rather than blocking a write),
+because "does this change need docs?" has real false positives — unlike the
+change budget, which is a hard count.
+
+The developer, architect, and devops personas carry the contract. QA and the
+business analyst do not: their outputs are already prose artifacts.
+
 ---
 
 ## 9. State, checkpoints, traceability
