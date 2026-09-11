@@ -5,3 +5,4 @@ dist/
 # Local run state produced while dogfooding pi on itself.
 pi/runs/
 .DS_Store
+PLAN.md
