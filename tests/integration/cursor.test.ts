@@ -107,12 +107,13 @@ describe("pi install", () => {
 
   test("wires every event the guard needs", () => {
     const hooks = JSON.parse(readFileSync(join(project, ".cursor", "hooks.json"), "utf-8"));
+    // No `stop`. Its only reply channel is submitted as a user prompt, which
+    // would make pi the author of the human presence its gates rest on.
     assert.deepEqual(Object.keys(hooks.hooks).sort(), [
       "beforeSubmitPrompt",
       "postToolUse",
       "preToolUse",
       "sessionStart",
-      "stop",
     ]);
     assert.match(hooks.hooks.preToolUse[0].command, /adapter\.ts"? guard$/);
   });
@@ -240,10 +241,24 @@ describe("the adapter during a run", () => {
     assert.match(verdict.agent_message!, /waiting on your review/);
   });
 
-  test("stop nudges rather than blocking, since Cursor's stop cannot refuse", () => {
-    const output = JSON.parse(hook("stop", { hook_event_name: "stop" }));
-    assert.match(output.followup_message, /waiting on your review/);
-    assert.ok(!("permission" in output), "stop has no decision channel");
+  // A gate is open at this point, which is exactly when the old nudge fired.
+  // Cursor submits `followup_message` as the next user message, so emitting one
+  // here would fire `beforeSubmitPrompt` and record a human turn that no human
+  // took — satisfying the presence check on evidence pi wrote itself.
+  test("says nothing at a gate, so it cannot mint its own human turn", () => {
+    assert.equal(hook("stop", { hook_event_name: "stop" }).trim(), "");
+  });
+
+  test("a gate still needs a turn pi did not generate", () => {
+    const before = JSON.parse(pi("status", "--json").out);
+    hook("stop", { hook_event_name: "stop" });
+
+    const after = JSON.parse(pi("status", "--json").out);
+    assert.equal(
+      after.lastHumanTurnAt,
+      before.lastHumanTurnAt,
+      "the stop hook must not advance the timestamp gates are resolved against",
+    );
   });
 
   test("the human turn from the hook is enough to resolve the review", () => {

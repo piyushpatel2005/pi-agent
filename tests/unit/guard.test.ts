@@ -99,9 +99,31 @@ describe("reading is always allowed", () => {
 });
 
 describe("run and step state", () => {
-  test("a finished run accepts no changes", () => {
+  // The three terminal statuses do not behave alike, and the asymmetry is the
+  // point: a completed run has nothing left to protect, while a failed one
+  // reached a plan that turned out to be wrong and a parked one still has work
+  // pending. Pinning only the status that changed would leave the other two
+  // free to drift into matching it.
+  test("a completed run no longer governs the project", () => {
     const done = stateAt("build", { status: RunStatus.Completed });
-    assertDenied(check(done, { tool: ToolName.WriteCode }), DenialReason.RunNotActive);
+    assert.equal(check(done, { tool: ToolName.WriteCode }).permission, Permission.Allow);
+  });
+
+  // Placement, not just behavior. A finished run also has no current step, so
+  // an allowance sitting below that check would never be reached.
+  test("a completed run is allowed even with no current step", () => {
+    const done = stateAt("build", { status: RunStatus.Completed, currentStep: null });
+    assert.equal(check(done, { tool: ToolName.WriteCode }).permission, Permission.Allow);
+  });
+
+  test("a failed run accepts no changes", () => {
+    const failed = stateAt("build", { status: RunStatus.Failed });
+    assertDenied(check(failed, { tool: ToolName.WriteCode }), DenialReason.RunNotActive);
+  });
+
+  test("a parked run accepts no changes", () => {
+    const parked = stateAt("build", { status: RunStatus.Parked });
+    assertDenied(check(parked, { tool: ToolName.WriteCode }), DenialReason.RunNotActive);
   });
 
   test("no active step means there is nothing to change", () => {

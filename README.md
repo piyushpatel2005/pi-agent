@@ -425,18 +425,19 @@ What gets wired, by Cursor event:
 | Event | What pi does |
 | --- | --- |
 | `sessionStart` | Tells a fresh session which run is active and where it stands |
-| `beforeSubmitPrompt` | Mints the human turn that gates depend on |
+| `beforeSubmitPrompt` | Records the human turn that gates depend on |
 | `preToolUse` | The guard: allow or deny, with a reason |
 | `postToolUse` | Records what was actually changed, for the tally |
-| `stop` | Nudges when a review or approval is outstanding |
 
 Two honest caveats:
 
 - **The guard fails open.** Any internal error allows the call. A guard that
   bricks your editor when pi has a bug is worse than one that occasionally
   misses a write, and the review gates still catch the work before it lands.
-- **`stop` cannot block.** Cursor's stop hook has no decision channel, so an
-  unfinished run surfaces as a follow-up nudge, not a refusal.
+- **Nothing runs at the end of a turn.** Cursor's `stop` hook can only answer
+  with a message that Cursor then submits as the next user prompt, which would
+  make pi the author of the human turn its own gates check. An outstanding
+  review surfaces in the agent's closing message and in `pi status` instead.
 
 Porting to another tool means writing those three things for it and nothing
 else — the engine, personas, and workflows are host-neutral.
