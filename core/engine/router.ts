@@ -15,6 +15,8 @@
 // Nothing here reads the filesystem. That keeps the decision logic testable as
 // a table of inputs and outputs rather than as a fixture directory.
 
+import { createHash } from "node:crypto";
+
 import {
   DirectiveKind,
   type ArtifactRef,
@@ -315,6 +317,14 @@ export type ReportInput = {
   /** Required on rejection: what the human wants changed. */
   feedback?: string;
   error?: string;
+  /**
+   * The repository's commit at this moment, when it is a git repo.
+   *
+   * Supplied by the caller because the router does not touch the filesystem.
+   * Recorded on the checkpoint so a rewind can tell you what the code looked
+   * like at that boundary — pi moves its own state, never your working tree.
+   */
+  gitHead?: string;
 };
 
 /**
@@ -354,7 +364,7 @@ export function applyReport(
       return events;
 
     case StepResult.Approved:
-      return approveStep(draft, workflow, step, stepState, timestamp, events);
+      return approveStep(draft, workflow, step, stepState, timestamp, events, input.gitHead);
 
     case StepResult.Rejected:
       return rejectStep(draft, step, stepState, input, timestamp, events);
@@ -399,7 +409,7 @@ function completeStep(
     return events;
   }
 
-  finishStep(draft, workflow, step, stepState, timestamp, events);
+  finishStep(draft, workflow, step, stepState, timestamp, events, input.gitHead);
   return events;
 }
 
@@ -444,6 +454,7 @@ function approveStep(
   stepState: StepState,
   timestamp: string,
   events: PiEventInput[],
+  gitHead?: string,
 ): PiEventInput[] {
   if (stepState.status === StepStatus.Completed) return events;
 
@@ -466,7 +477,7 @@ function approveStep(
     kind: "approval",
     outcome: "approved",
   });
-  finishStep(draft, workflow, step, stepState, timestamp, events);
+  finishStep(draft, workflow, step, stepState, timestamp, events, gitHead);
   return events;
 }
 
@@ -508,6 +519,7 @@ function finishStep(
   stepState: StepState,
   timestamp: string,
   events: PiEventInput[],
+  gitHead?: string,
 ): void {
   stepState.status = StepStatus.Completed;
   stepState.completedAt = timestamp;
@@ -521,20 +533,38 @@ function finishStep(
   });
 
   if (step.checkpoint) {
+    const digest = boundaryDigest(draft, step.id);
+
     draft.checkpoints.push({
       step: step.id,
       at: timestamp,
-      digest: draft.workflowDigest,
+      digest,
       artifacts: stepState.artifacts,
+      ...(gitHead ? { gitHead } : {}),
     });
-    events.push({
-      type: EventType.CheckpointSaved,
-      step: step.id,
-      digest: draft.workflowDigest,
-    });
+    events.push({ type: EventType.CheckpointSaved, step: step.id, digest });
   }
 
   advanceCursor(draft, workflow);
+}
+
+/**
+ * Fingerprint of a run boundary: which step just finished, everything finished
+ * before it, and what they produced.
+ *
+ * Deliberately not a digest of the whole state. The checkpoint entry lives
+ * inside the state it would be describing, so hashing all of it cannot be done
+ * without hashing the hash. This covers what a rewind actually needs to verify:
+ * that a snapshot on disk is the boundary its index entry claims.
+ */
+export function boundaryDigest(state: RunState, stepId: string): string {
+  const finished = Object.entries(state.steps)
+    .filter(([, step]) => TERMINAL_STEP_STATUSES.has(step.status))
+    .map(([id, step]) => `${id}:${step.status}:${[...step.artifacts].sort().join("|")}`)
+    .sort();
+
+  const canonical = JSON.stringify({ runId: state.runId, step: stepId, finished });
+  return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
 }
 
 /**

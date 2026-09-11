@@ -58,6 +58,19 @@ export type StateStore = {
   init: (initial: RunState) => RunState;
   /** Locked read-modify-write. The mutator receives a private copy. */
   update: (mutate: (draft: RunState) => void) => RunState;
+  /**
+   * Replace the state wholesale, for a rewind.
+   *
+   * `update` refuses to drop a step or discard a receipt, which is what makes
+   * an approval impossible to retarget during normal operation. A rewind has to
+   * do exactly that, so it gets its own door rather than a weakened invariant —
+   * the guard stays absolute everywhere else, and the one place that bypasses
+   * it is named, deliberate, and confirmed by a human at the CLI.
+   *
+   * Run identity is still enforced: a rewind moves a run backwards, it does not
+   * turn it into a different run.
+   */
+  restore: (state: RunState) => RunState;
 };
 
 export type StoreOptions = {
@@ -163,12 +176,44 @@ export function createStateStore(paths: RunPaths, options: StoreOptions = {}): S
         release();
       }
     },
+
+    restore(state) {
+      const release = acquireLock();
+      try {
+        const before = read();
+        const after = RunState.parse({ ...state, updatedAt: now().toISOString() });
+
+        assertRunIdentity(before, after);
+        writeAtomic(after);
+        return after;
+      } finally {
+        release();
+      }
+    },
   };
 }
 
 // ── Invariants ──────────────────────────────────────────────────────────────
 
 function assertInvariants(before: RunState, after: RunState): void {
+  assertRunIdentity(before, after);
+
+  for (const [stepId, beforeStep] of Object.entries(before.steps)) {
+    const afterStep = after.steps[stepId];
+
+    if (!afterStep) {
+      throw new StateInvariantError(
+        "step-retention",
+        `step "${stepId}" disappeared; a step may change status but never vanish`,
+      );
+    }
+
+    assertReceiptsAppendOnly(stepId, beforeStep.receipts, afterStep.receipts);
+  }
+}
+
+/** A run does not become a different run. True of updates and rewinds alike. */
+function assertRunIdentity(before: RunState, after: RunState): void {
   if (after.runId !== before.runId) {
     throw new StateInvariantError(
       "run-identity",
@@ -185,19 +230,6 @@ function assertInvariants(before: RunState, after: RunState): void {
 
   if (Date.parse(after.createdAt) !== Date.parse(before.createdAt)) {
     throw new StateInvariantError("run-identity", "createdAt is immutable");
-  }
-
-  for (const [stepId, beforeStep] of Object.entries(before.steps)) {
-    const afterStep = after.steps[stepId];
-
-    if (!afterStep) {
-      throw new StateInvariantError(
-        "step-retention",
-        `step "${stepId}" disappeared; a step may change status but never vanish`,
-      );
-    }
-
-    assertReceiptsAppendOnly(stepId, beforeStep.receipts, afterStep.receipts);
   }
 }
 

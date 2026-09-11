@@ -260,6 +260,50 @@ describe("receipts are append-only", () => {
   });
 });
 
+describe("restore", () => {
+  function storeWithReceipt() {
+    const store = createStateStore(paths);
+    store.init(initialState());
+    store.update((draft) => void draft.steps.build!.receipts.push(receipt));
+    return store;
+  }
+
+  test("discards receipts that update would refuse to drop", () => {
+    const store = storeWithReceipt();
+
+    // Prove the ordinary door is shut before showing the rewind door is open.
+    assert.throws(
+      () => store.update((draft) => void (draft.steps.build!.receipts = [])),
+      (error: StateInvariantError) => error.invariant === "receipt-append-only",
+    );
+
+    const rewound = structuredClone(store.read());
+    rewound.steps.build!.receipts = [];
+
+    assert.equal(store.restore(rewound).steps.build?.receipts.length, 0);
+    assert.equal(store.read().steps.build?.receipts.length, 0);
+  });
+
+  test("still refuses to turn one run into another", () => {
+    const store = storeWithReceipt();
+    const imposter = structuredClone(store.read());
+    imposter.runId = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
+
+    assert.throws(
+      () => store.restore(imposter),
+      (error: StateInvariantError) => error.invariant === "run-identity",
+    );
+  });
+
+  test("stamps updatedAt so the restore is visible as a change", () => {
+    const store = storeWithReceipt();
+    const before = store.read();
+
+    const after = store.restore(structuredClone(before));
+    assert.notEqual(after.updatedAt, "2026-09-10T00:00:00.000Z");
+  });
+});
+
 describe("locking", () => {
   test("reports a stuck lock instead of hanging", () => {
     const store = createStateStore(paths, { lockTimeoutMs: 50, staleLockMs: 60_000 });

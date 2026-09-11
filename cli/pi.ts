@@ -20,7 +20,16 @@ import {
   type ToolCall,
 } from "../core/engine/guard.ts";
 import { ReviewError, parseReviewedFile, requestReview, resolveReview } from "../core/engine/review.ts";
-import { runPaths } from "../core/engine/paths.ts";
+import {
+  CheckpointError,
+  auditSnapshots,
+  discardSnapshots,
+  gitHead,
+  planRewind,
+  rewindEvents,
+  saveSnapshot,
+} from "../core/engine/checkpoints.ts";
+import { checkpointPath, runPaths } from "../core/engine/paths.ts";
 import {
   RouterError,
   StepResult,
@@ -352,16 +361,25 @@ function cmdReport(workspace: Workspace, args: Args): number {
   }
 
   let emitted: ReturnType<typeof applyReport> = [];
-  store.update((draft) => {
+  const after = store.update((draft) => {
     emitted = applyReport(draft, workflow, {
       step,
       result,
       artifacts,
       feedback: flagString(args, "feedback"),
       error: flagString(args, "error"),
+      gitHead: gitHead(workspace.projectDir),
     });
   });
   log.appendAll(emitted);
+
+  // The router decided a boundary was reached; persisting it is our job. The
+  // snapshot is written after the state, so a crash between the two leaves an
+  // index entry with no file — which `pi doctor` reports — rather than a
+  // snapshot of a state that was never current.
+  for (const event of emitted) {
+    if (event.type === EventType.CheckpointSaved) saveSnapshot(paths, after, step);
+  }
 
   // Sensors run when a step says it is done, so their findings reach the human
   // at the gate — the moment they are about to decide.
@@ -813,6 +831,83 @@ function cmdWorkflows(workspace: Workspace, args: Args): number {
   return 0;
 }
 
+function cmdCheckpoints(workspace: Workspace, args: Args): number {
+  const { paths } = requireActiveRun(workspace.projectDir);
+  const state = createStateStore(paths).read();
+
+  if (wantsJson(args)) {
+    console.log(JSON.stringify(state.checkpoints, null, 2));
+    return 0;
+  }
+
+  if (state.checkpoints.length === 0) {
+    console.log("No checkpoints yet. They are written as checkpointed steps complete.");
+    return 0;
+  }
+
+  console.log(`Checkpoints for run ${state.runId}:`);
+  console.log("");
+  for (const checkpoint of state.checkpoints) {
+    const missing = existsSync(checkpointPath(paths, checkpoint.step)) ? "" : "  (snapshot missing)";
+    console.log(`  ${checkpoint.step}${missing}`);
+    console.log(`    at        ${checkpoint.at}`);
+    if (checkpoint.gitHead) console.log(`    git HEAD  ${checkpoint.gitHead.slice(0, 12)}`);
+    if (checkpoint.artifacts.length > 0) {
+      console.log(`    artifacts ${checkpoint.artifacts.join(", ")}`);
+    }
+  }
+
+  console.log("");
+  console.log("Rewind with: pi rewind --to <step>");
+  return 0;
+}
+
+function cmdRewind(workspace: Workspace, args: Args): number {
+  const { runId, paths } = requireActiveRun(workspace.projectDir);
+  const store = createStateStore(paths);
+  const state = store.read();
+  const workflow = requireWorkflow(workspace, state.workflow);
+
+  const target = flagString(args, "to") ?? flagString(args, "step");
+  if (!target) {
+    console.error("Usage: pi rewind --to <step> [--yes]");
+    console.error("Run `pi checkpoints` to see where you can rewind to.");
+    return 2;
+  }
+
+  const plan = planRewind(paths, state, workflow, target);
+
+  // A rewind throws work away, so it is shown before it is done. Without
+  // `--yes` this is a dry run and nothing on disk changes.
+  console.log(
+    plan.from
+      ? `Rewind run ${runId} to "${plan.target}", restoring the checkpoint taken after "${plan.from.step}".`
+      : `Rewind run ${runId} to the start, before any step ran.`,
+  );
+  console.log("");
+  console.log(`  undoes    ${plan.undone.join(", ") || "nothing"}`);
+  console.log(`  discards  ${plan.discardedReceipts} review receipt(s)`);
+  if (plan.from?.gitHead) {
+    console.log(`  code was  ${plan.from.gitHead.slice(0, 12)} at that checkpoint`);
+  }
+  console.log("");
+  console.log("Your files are not touched. pi moves its own state; moving the code is yours.");
+
+  if (args.flags.get("yes") !== true) {
+    console.log("");
+    console.log("Nothing changed. Re-run with --yes to apply.");
+    return 0;
+  }
+
+  store.restore(plan.state);
+  createEventLog(paths.events, runId).appendAll(rewindEvents(plan));
+  discardSnapshots(paths, plan.undone);
+
+  console.log("");
+  console.log(`Rewound. Next step: ${plan.state.currentStep ?? "none"}`);
+  return 0;
+}
+
 function cmdDoctor(workspace: Workspace): number {
   let failures = 0;
   const ok = (message: string) => console.log(`ok    ${message}`);
@@ -866,6 +961,15 @@ function cmdDoctor(workspace: Workspace): number {
     damaged.length === 0
       ? ok("event log is intact")
       : bad(`${damaged.length} unreadable event line(s) (first at line ${damaged[0]?.line})`);
+
+    try {
+      const problems = auditSnapshots(paths, createStateStore(paths).read());
+      problems.length === 0
+        ? ok("checkpoints match their snapshots")
+        : problems.forEach((problem) => bad(problem));
+    } catch {
+      // Unreadable state is already reported above; no need to say it twice.
+    }
   }
 
   console.log("");
@@ -959,6 +1063,8 @@ Usage
   pi workflows [<id>] [--json]             list workflows, or show one
   pi agents [<id>] [--json]                list personas, or show one
   pi sensors [--step <id>] [--list]        dry-run the current step's checks
+  pi checkpoints                           list the boundaries you can rewind to
+  pi rewind --to <step> [--yes]            move the run back to a boundary
   pi doctor                                check this project's setup
   pi version
 
@@ -1014,6 +1120,11 @@ function main(argv: string[]): number {
     case "workflows":
     case "workflow":
       return cmdWorkflows(workspace, args);
+    case "checkpoints":
+    case "checkpoint":
+      return cmdCheckpoints(workspace, args);
+    case "rewind":
+      return cmdRewind(workspace, args);
     case "doctor":
       return cmdDoctor(workspace);
     default:
@@ -1030,6 +1141,7 @@ try {
     cause instanceof WorkspaceError ||
     cause instanceof RouterError ||
     cause instanceof ReviewError ||
+    cause instanceof CheckpointError ||
     cause instanceof InstallError
   ) {
     // Expected, explainable failures: say the one useful sentence, not a stack.

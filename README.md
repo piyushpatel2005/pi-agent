@@ -130,6 +130,8 @@ pi log         # everything that has happened
 | `pi review request` | Stop and ask for review of a change |
 | `pi review resolve` | Answer the open review |
 | `pi review status` | Reviews on the current step |
+| `pi checkpoints` | The boundaries you can rewind to |
+| `pi rewind --to <step>` | Move the run back to a boundary |
 | `pi guard --tool <id>` | May this call proceed? (for harness hooks) |
 | `pi human-turn` | Record that a human acted (gates require this) |
 | `pi doctor` | Check this project's setup |
@@ -417,15 +419,48 @@ else — the engine, personas, and workflows are host-neutral.
 
 ```
 <project>/pi/runs/<runId>/
-  state.json       truth-of-now: step statuses, receipts, checkpoints
-  events.ndjson    append-only audit log
-  artifacts/       what each step produced
-  checkpoints/
+  state.json        truth-of-now: step statuses, receipts, checkpoint index
+  events.ndjson     append-only audit log
+  artifacts/        what each step produced
+  checkpoints/      one full state snapshot per boundary
 ```
 
 `state.json` is a cache the engine can answer guard questions from quickly;
 `events.ndjson` is the record of what actually happened. `pi/runs/` should be
 gitignored.
+
+## Checkpoints and rewinding
+
+A step marked `checkpoint` writes a snapshot of the whole run state when it
+completes, along with the commit your working tree was on at the time.
+
+```bash
+pi checkpoints                 # where you can rewind to
+pi rewind --to design          # show what it would undo; change nothing
+pi rewind --to design --yes    # do it
+```
+
+`pi rewind --to <step>` makes that step the next one to run, which means undoing
+it and everything after. Without `--yes` it is a dry run: it prints the steps it
+would undo and the review receipts it would discard, and exits.
+
+Three things are worth knowing:
+
+**It does not touch your files.** pi moves its own state, not your working tree.
+Checkpoints record the commit they were taken at so you can move the code
+yourself with git; a tool that silently reverted your files would be one you
+could not afford to be wrong. `pi rewind` prints that commit for you.
+
+**It does not erase history.** The event log is append-only, and a rewind is
+appended to it like anything else. `pi log` still shows the work you undid.
+
+**It refuses an edited snapshot.** Each snapshot is fingerprinted against the
+boundary it was taken at. If the file no longer matches, the rewind stops rather
+than restoring a state the run was never in. `pi doctor` checks the same thing.
+
+Rewinding to the first step resets the run to its original plan and needs no
+checkpoint at all. Steps that a `when` condition skipped stay skipped — that was
+a decision about the project, not work that was done.
 
 ## Development
 
@@ -441,7 +476,6 @@ strip types and run the source directly.
 ## Status
 
 Early, but usable end to end on Cursor: the engine, workflows, personas, the
-guard, review receipts, sensors, the CLI, and the Cursor harness.
+guard, review receipts, sensors, checkpoints, the CLI, and the Cursor harness.
 
-Still to come: `pi rewind` to a checkpoint, and harnesses for Claude Code and
-Copilot.
+Still to come: harnesses for Claude Code and Copilot.
