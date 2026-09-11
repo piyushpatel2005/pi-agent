@@ -212,3 +212,37 @@ export function pendingReceipt(step: StepState): ReviewReceipt | undefined {
 export function changedFileCount(step: StepState): number {
   return new Set(step.changedFiles).size;
 }
+
+/**
+ * The most recent approval, which is where the budget starts counting again.
+ *
+ * Receipts are append-only and in request order, so the last approved one is
+ * the current baseline.
+ */
+export function latestApprovedReceipt(step: StepState): ReviewReceipt | undefined {
+  return step.receipts.findLast((receipt) => receipt.resolution?.approved === true);
+}
+
+/**
+ * What this step has changed since its last approved review — or since it
+ * started, if there has not been one.
+ *
+ * This is the quantity the budget is measured against, and it is what makes the
+ * budget mean "review every N files" rather than "you get N files per step,
+ * ever". Being reviewed buys a fresh allowance; it does not raise the ceiling.
+ */
+export function tallySinceReview(step: StepState): { files: string[]; lines: number } {
+  const baseline = latestApprovedReceipt(step);
+  if (!baseline) {
+    return { files: [...new Set(step.changedFiles)], lines: step.changedLines };
+  }
+
+  // Files the human already saw do not count again; changing one of them
+  // further still adds lines, which is why lines are a simple difference.
+  const reviewed = new Set(baseline.files.map((file) => file.path));
+
+  return {
+    files: [...new Set(step.changedFiles)].filter((path) => !reviewed.has(path)),
+    lines: Math.max(0, step.changedLines - baseline.changedLines),
+  };
+}

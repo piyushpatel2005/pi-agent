@@ -95,12 +95,17 @@ export type Agent = AgentSpec & {
 
 /**
  * What the role may actually use on this step: the workflow's grant, narrowed
- * by the persona's own denials.
+ * to the persona's ceiling, minus its denials.
  *
- * The grant is already known to be within the persona's ceiling — the compiler
- * refuses a workflow where it is not — so this only subtracts denials.
+ * The compiler already refuses a workflow that grants beyond the ceiling, so
+ * intersecting here is redundant in the happy path. It is kept because the
+ * guard calls this on every tool call and a stale grant — a project persona
+ * that revoked a tool the workflow still lists — must not be the one case where
+ * the ceiling quietly stops applying.
  */
 export function effectiveTools(agent: AgentSpec, granted: readonly string[]): string[] {
+  const allowed = new Set<string>(agent.tools);
   const denied = new Set<string>([...agent.denyTools, ...ALWAYS_DENIED]);
-  return granted.filter((tool) => !denied.has(tool));
+
+  return granted.filter((tool) => allowed.has(tool) && !denied.has(tool));
 }

@@ -11,6 +11,14 @@ import { join } from "node:path";
 
 import { renderBrief, requireAgent } from "../core/engine/agents.ts";
 import { createEventLog } from "../core/engine/event-log.ts";
+import {
+  Permission,
+  denialEvent,
+  evaluate,
+  recordChange,
+  type ToolCall,
+} from "../core/engine/guard.ts";
+import { ReviewError, parseReviewedFile, requestReview, resolveReview } from "../core/engine/review.ts";
 import { runPaths } from "../core/engine/paths.ts";
 import {
   RouterError,
@@ -346,6 +354,197 @@ function cmdReport(workspace: Workspace, args: Args): number {
   return 0;
 }
 
+// ── The guard ───────────────────────────────────────────────────────────────
+//
+// This is the hook entry point. It runs on every tool call, so it stays quiet,
+// fast, and fails open: if the guard cannot tell whether something is allowed,
+// blocking the user's editor is worse than letting the call through.
+
+function toolCallFrom(args: Args): ToolCall {
+  const files = flagString(args, "files")
+    ?.split(",")
+    .map((file) => file.trim())
+    .filter(Boolean);
+
+  const lines = Number.parseInt(flagString(args, "lines") ?? "0", 10);
+
+  return {
+    tool: flagString(args, "tool") ?? "",
+    files: files ?? [],
+    lines: Number.isNaN(lines) ? 0 : lines,
+  };
+}
+
+function cmdGuard(workspace: Workspace, args: Args): number {
+  const call = toolCallFrom(args);
+  if (call.tool === "") {
+    console.error("Usage: pi guard --tool <id> [--files a,b] [--lines n] [--record]");
+    return 2;
+  }
+
+  const runId = activeRunId(workspace.projectDir);
+  if (!runId) {
+    // No run means pi is not governing this session. Say nothing and allow.
+    console.log(JSON.stringify({ permission: Permission.Allow }));
+    return 0;
+  }
+
+  const paths = runPaths(workspace.projectDir, runId);
+  const store = createStateStore(paths);
+  const state = store.read();
+  const workflow = requireWorkflow(workspace, state.workflow);
+  const agent = state.currentStep ? state.steps[state.currentStep]?.agent : undefined;
+
+  const verdict = evaluate(state, workflow, call, {
+    agent: agent ? workspace.roster.agents.get(agent) : undefined,
+  });
+
+  if (verdict.permission === Permission.Deny) {
+    createEventLog(paths.events, runId).appendAll(
+      denialEvent(call, verdict, state.currentStep),
+    );
+    console.log(
+      JSON.stringify({ permission: Permission.Deny, agent_message: verdict.message }),
+    );
+    return 0;
+  }
+
+  // `--record` is the post-tool-use half: the call happened, so it counts.
+  if (args.flags.get("record") === true) {
+    store.update((draft) => recordChange(draft, call));
+  }
+
+  console.log(JSON.stringify({ permission: Permission.Allow }));
+  return 0;
+}
+
+// ── Review ──────────────────────────────────────────────────────────────────
+
+function cmdReview(workspace: Workspace, args: Args): number {
+  const action = args.positional[0] ?? "status";
+  const { runId, paths } = requireActiveRun(workspace.projectDir);
+  const store = createStateStore(paths);
+  const log = createEventLog(paths.events, runId);
+
+  switch (action) {
+    case "request":
+      return reviewRequest(store, log, args);
+    case "resolve":
+      return reviewResolve(workspace, store, log, args);
+    case "status":
+      return reviewStatus(store, args);
+    default:
+      console.error(`Unknown review action "${action}". Expected: request, resolve, status.`);
+      return 2;
+  }
+}
+
+type Store = ReturnType<typeof createStateStore>;
+type Log = ReturnType<typeof createEventLog>;
+
+function reviewRequest(store: Store, log: Log, args: Args): number {
+  const summary = flagString(args, "summary");
+  const files = flagString(args, "files")
+    ?.split(",")
+    .map((raw) => raw.trim())
+    .filter(Boolean)
+    .map(parseReviewedFile);
+
+  if (!summary || !files || files.length === 0) {
+    console.error('Usage: pi review request --summary "<what and why>" --files <paths> [--lines n]');
+    return 2;
+  }
+
+  const changedLines = Number.parseInt(flagString(args, "lines") ?? "0", 10);
+
+  let requested: ReturnType<typeof requestReview> | undefined;
+  store.update((draft) => {
+    requested = requestReview(draft, {
+      summary,
+      files,
+      changedLines: Number.isNaN(changedLines) ? 0 : changedLines,
+    });
+  });
+  log.appendAll(requested!.events);
+
+  if (wantsJson(args)) {
+    console.log(JSON.stringify(requested!.receipt, null, 2));
+    return 0;
+  }
+
+  console.log(`Review requested for step "${requested!.receipt.step}".`);
+  console.log("");
+  console.log(summary);
+  for (const file of files) console.log(`  ${file.action} ${file.path}`);
+  console.log("");
+  console.log("The step is frozen until this is answered:");
+  console.log("  pi review resolve --approve");
+  console.log('  pi review resolve --reject --feedback "..."');
+  return 0;
+}
+
+function reviewResolve(workspace: Workspace, store: Store, log: Log, args: Args): number {
+  const approve = args.flags.get("approve") === true;
+  const reject = args.flags.get("reject") === true;
+
+  if (approve === reject) {
+    console.error("Pass exactly one of --approve or --reject.");
+    return 2;
+  }
+
+  // Answering a review from an interactive terminal is itself the human acting.
+  if (process.stdin.isTTY) recordHumanTurn(workspace.projectDir, "cli-tty");
+
+  let resolved: ReturnType<typeof resolveReview> | undefined;
+  store.update((draft) => {
+    resolved = resolveReview(draft, {
+      approved: approve,
+      feedback: flagString(args, "feedback"),
+    });
+  });
+  log.appendAll(resolved!.events);
+
+  if (wantsJson(args)) {
+    console.log(JSON.stringify(resolved!.receipt, null, 2));
+    return 0;
+  }
+
+  console.log(
+    approve
+      ? "Approved. The step continues with a fresh change budget."
+      : "Sent back with your feedback. The step continues from where it was.",
+  );
+  return 0;
+}
+
+function reviewStatus(store: Store, args: Args): number {
+  const state = store.read();
+  const stepState = state.currentStep ? state.steps[state.currentStep] : undefined;
+  const receipts = stepState?.receipts ?? [];
+
+  if (wantsJson(args)) {
+    console.log(JSON.stringify(receipts, null, 2));
+    return 0;
+  }
+
+  if (receipts.length === 0) {
+    console.log(`No reviews on step "${state.currentStep ?? "(none)"}".`);
+    return 0;
+  }
+
+  for (const receipt of receipts) {
+    const answer = receipt.resolution
+      ? receipt.resolution.approved
+        ? "approved"
+        : `rejected — ${receipt.resolution.feedback}`
+      : "WAITING ON YOU";
+    console.log(`${receipt.requestedAt.slice(11, 19)}  ${answer}`);
+    console.log(`  ${receipt.summary}`);
+    for (const file of receipt.files) console.log(`    ${file.action} ${file.path}`);
+  }
+  return 0;
+}
+
 function cmdStatus(workspace: Workspace, args: Args): number {
   const runId = activeRunId(workspace.projectDir);
   if (!runId) {
@@ -606,6 +805,13 @@ Usage
   pi next [--brief] [--json]               what to do now; --brief for the full prompt
   pi report --step <id> --result <r>       record the outcome of a step
              [--artifacts a,b] [--feedback "..."] [--error "..."]
+  pi review request --summary "..."        stop and ask for review of a change
+                    --files a,b [--lines n]
+  pi review resolve --approve              answer the open review
+                    | --reject --feedback "..."
+  pi review status                         reviews on the current step
+  pi guard --tool <id> [--files a,b]       may this tool call proceed? (for hooks)
+           [--lines n] [--record]
   pi human-turn [--source <name>]          record that a human acted (gates need this)
   pi log [--step <id>] [--json]            the run's event history
   pi workflows [<id>] [--json]             list workflows, or show one
@@ -649,6 +855,10 @@ function main(argv: string[]): number {
       return cmdReport(workspace, args);
     case "human-turn":
       return cmdHumanTurn(workspace, args);
+    case "guard":
+      return cmdGuard(workspace, args);
+    case "review":
+      return cmdReview(workspace, args);
     case "status":
       return cmdStatus(workspace, args);
     case "log":
@@ -668,7 +878,11 @@ function main(argv: string[]): number {
 try {
   process.exitCode = main(process.argv.slice(2));
 } catch (cause) {
-  if (cause instanceof WorkspaceError || cause instanceof RouterError) {
+  if (
+    cause instanceof WorkspaceError ||
+    cause instanceof RouterError ||
+    cause instanceof ReviewError
+  ) {
     // Expected, explainable failures: say the one useful sentence, not a stack.
     console.error(cause.message);
     process.exitCode = 1;

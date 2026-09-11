@@ -120,6 +120,10 @@ pi log         # everything that has happened
 | `pi log` | The event history; `--step <id>` to narrow |
 | `pi workflows [<id>]` | List workflows, or show one in detail |
 | `pi agents [<id>]` | List personas, or show one in detail |
+| `pi review request` | Stop and ask for review of a change |
+| `pi review resolve` | Answer the open review |
+| `pi review status` | Reviews on the current step |
+| `pi guard --tool <id>` | May this call proceed? (for harness hooks) |
 | `pi human-turn` | Record that a human acted (gates require this) |
 | `pi doctor` | Check this project's setup |
 
@@ -136,6 +140,54 @@ Approval gates need evidence that a person was actually there. `pi report
 interactive terminal. When a harness drives `pi` non-interactively, the harness
 hook calls `pi human-turn` on the user's real messages instead. Either way, an
 agent running unattended cannot manufacture its own approval.
+
+## Small, reviewed changes
+
+This is the part that makes `pi` more than a prompt. A step declares how much it
+may change:
+
+```json
+"changeBudget": { "maxFiles": 8, "maxLines": 300 }
+```
+
+The guard is consulted before every tool call and refuses the one that would
+cross the limit, with a message naming the way forward:
+
+```
+This change would put step "backend-implementation" at 310 lines against a
+limit of 300.
+
+The limit exists so that changes arrive in pieces a person can actually read.
+Stop here, summarize what you have done so far, and ask for review:
+
+  pi review request --summary "<what you changed and why>" --files <paths>
+```
+
+The tally is cumulative across the step, so splitting one change into smaller
+calls doesn't get around it. Distinct files are counted, so rewriting the same
+file five times is one file.
+
+When the agent requests review, **the step freezes** — no further changes are
+accepted until you answer, so the diff can't move underneath you:
+
+```bash
+pi review status              # what you owe an answer on
+pi review resolve --approve
+pi review resolve --reject --feedback "Split the write path"
+```
+
+**Approval starts the budget fresh; it does not raise the ceiling.** So the
+budget means "review every N files", not "N files per step, ever". Rejection
+resumes the step with your feedback attached.
+
+`requireReviewBefore: ["write-code"]` forces a review before the *first* write
+of a step, however small — for when you want to see the plan, not just the
+overflow.
+
+Three things keep a receipt from being theatre: it fingerprints what you read
+(so an approval can't be retargeted at different work), the state store refuses
+any edit to it after the fact, and resolving requires a recorded human turn, so
+an unattended run can't approve its own work.
 
 ## Personas
 
@@ -291,7 +343,11 @@ strip types and run the source directly.
 
 ## Status
 
-Early. The engine, schemas, workflows, personas, and CLI work end to end. The
-tool registry with its reviewer gate, the sensors, and the Cursor harness
-projection are still being built — which means budgets and review requirements
-are currently stated in the brief but not yet mechanically enforced.
+Early, but the core works end to end: the engine, workflows, personas, the
+guard, review receipts, and the CLI.
+
+Still to come: the Cursor harness projection, which wires `pi guard` to Cursor's
+pre-tool-use hook. Until then the guard is enforced only when something calls
+it — `pi guard --tool ...` works today and the tests drive it, but a coding
+agent won't consult it on its own yet. The sensors and `pi rewind` are also
+outstanding.
