@@ -514,9 +514,19 @@ Releases are annotated git tags named `v<version>`, with notes in
 you go, then:
 
 ```bash
-npm run release 0.2.0         # show what would happen; change nothing
-npm run release 0.2.0 --yes   # bump, close the changelog, commit, tag
+node scripts/release.ts 0.2.0         # show what would happen; change nothing
+node scripts/release.ts 0.2.0 --yes   # bump, close the changelog, commit, tag
 ```
+
+Through npm, flags need a bare `--` in front of them or npm keeps them for
+itself — `npm run release 0.2.0 --yes` silently does a dry run:
+
+```bash
+npm run release 0.2.0 -- --yes
+```
+
+The script notices that case and tells you, rather than leaving you to wonder
+why nothing happened.
 
 The dry run prints the exact release notes so you read them before they are
 permanent. Applying it refuses to continue unless the working tree is clean, the
@@ -542,9 +552,9 @@ after.
 A version with a prerelease tag is treated as a candidate:
 
 ```bash
-npm run release 1.0.0-rc.1 --yes
-npm run release 1.0.0-rc.2 --yes    # as many as you need
-npm run release 1.0.0 --yes         # the real thing
+node scripts/release.ts 1.0.0-rc.1 --yes
+node scripts/release.ts 1.0.0-rc.2 --yes    # as many as you need
+node scripts/release.ts 1.0.0 --yes         # the real thing
 ```
 
 The one thing that differs: **a candidate does not consume the `Unreleased`

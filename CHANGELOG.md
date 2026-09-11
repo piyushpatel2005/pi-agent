@@ -39,10 +39,10 @@ so when it does.
   report.
 - Runs record the pi release that created them, so an old run says which version
   of the tool to blame.
-- `npm run release <version>` cuts a release: bumps the version, closes this
-  file's `Unreleased` section, commits, and tags. Dry run by default; `--yes`
-  applies it. It stops short of pushing.
-- Release candidates: `npm run release 1.0.0-rc.1` tags a candidate without
-  consuming the `Unreleased` notes, so the final release still has them.
+- `node scripts/release.ts <version>` cuts a release: bumps the version, closes
+  this file's `Unreleased` section, commits, and tags. Dry run by default;
+  `--yes` applies it. It stops short of pushing.
+- Release candidates: `node scripts/release.ts 1.0.0-rc.1` tags a candidate
+  without consuming the `Unreleased` notes, so the final release still has them.
 - `npm run changes` lists commits since the last tag that no changelog entry
   seems to mention, grouped into changelog headings.

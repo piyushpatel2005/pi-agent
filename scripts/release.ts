@@ -40,6 +40,17 @@ const argv = process.argv.slice(2);
 const apply = argv.includes("--yes");
 const target = argv.find((arg) => !arg.startsWith("--"));
 
+/**
+ * `npm run release 0.1.0 --yes` keeps the flag for npm and never passes it on,
+ * so the script sees a dry run and the user sees "nothing changed" after asking
+ * for the opposite.
+ *
+ * The env var npm sets is evidence of intent, but it is not taken as consent:
+ * `yes = true` in an .npmrc would then turn every dry run into a real release.
+ * For a command that writes a tag, guessing is worse than explaining.
+ */
+const swallowedByNpm = !apply && process.env.npm_config_yes !== undefined;
+
 if (!target) {
   console.error("Usage: node scripts/release.ts <version> [--yes]");
   console.error("Example: node scripts/release.ts 0.1.0");
@@ -120,6 +131,17 @@ if (missing.length > 0) {
   for (const commit of missing) console.log(`  ? ${commit.short}  ${commit.subject}`);
   console.log("");
   console.log("  Add anything user-visible with: npm run changes");
+  console.log("");
+}
+
+// Printed before the blockers as well as instead of them. Someone with a dirty
+// tree and a swallowed flag would otherwise fix the tree, re-run, and be told
+// "nothing changed" a second time without ever learning why.
+if (swallowedByNpm) {
+  console.log("npm kept your --yes instead of passing it on. Put it after a bare --:");
+  console.log("");
+  console.log(`  npm run release ${target} -- --yes`);
+  console.log(`  node scripts/release.ts ${target} --yes`);
   console.log("");
 }
 
