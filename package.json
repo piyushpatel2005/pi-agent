@@ -18,8 +18,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "docs:build": "pi docs build",
-    "docs:serve": "pi docs serve",
+    "docs:build": "node cli/pi.ts docs build",
+    "docs:serve": "node cli/pi.ts docs serve",
     "test": "node --test",
     "typecheck": "tsc --noEmit",
     "release": "node scripts/release.ts",
