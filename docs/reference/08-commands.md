@@ -32,6 +32,7 @@ The run itself has four:
 | `active` | In progress. |
 | `parked` | Set aside at a clean boundary; resumable. |
 | `completed` | Every step is finished or skipped. |
+| `abandoned` | Stopped deliberately with `pi abandon`; history kept, guard released. |
 | `failed` | A step failed. |
 
 ### What moves a step
@@ -239,6 +240,19 @@ Typing in an interactive session records a turn automatically. This command is
 for the cases where that did not happen.
 
 ## Recovery
+
+### `pi abandon`
+
+Stops governing the active run without deleting it. The run's state and event
+log stay on disk with status `abandoned`, and the active-run pointer is cleared
+so the harness no longer refuses tool calls for that session.
+
+Use this when a run is stuck at a gate you no longer want to finish, or when the
+goal changed enough that starting fresh is simpler than rewinding. Optional
+`--reason` is recorded in the log and printed.
+
+Refuses when there is no active run. Agents cannot reach this command through
+the harness control plane — only a human at the CLI can.
 
 ### `pi checkpoints`
 

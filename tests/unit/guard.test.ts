@@ -110,6 +110,11 @@ describe("run and step state", () => {
     assert.equal(check(done, { tool: ToolName.WriteCode }).permission, Permission.Allow);
   });
 
+  test("an abandoned run no longer governs the project", () => {
+    const abandoned = stateAt("build", { status: RunStatus.Abandoned });
+    assert.equal(check(abandoned, { tool: ToolName.WriteCode }).permission, Permission.Allow);
+  });
+
   // Placement, not just behavior. A finished run also has no current step, so
   // an allowance sitting below that check would never be reached.
   test("a completed run is allowed even with no current step", () => {

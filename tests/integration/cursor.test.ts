@@ -327,10 +327,10 @@ describe("payload translation", () => {
     assert.deepEqual(tally(), { changedFiles: ["src/a.ts"], changedLines: 3 });
   });
 
-  test("Edit counts the larger side, not the sum", () => {
+  test("StrReplace counts the larger side, not the sum", () => {
     // 20 lines becoming 22 is a 22-line change, not a 42-line one. Inflating it
     // would spend budget the reviewer never sees the benefit of.
-    postToolUse("Edit", {
+    postToolUse("StrReplace", {
       file_path: "src/b.ts",
       old_string: Array.from({ length: 20 }, () => "a").join("\n"),
       new_string: Array.from({ length: 22 }, () => "b").join("\n"),
@@ -338,17 +338,13 @@ describe("payload translation", () => {
     assert.equal(tally().changedLines, 3 + 22);
   });
 
-  test("MultiEdit sums across its edits and collects every file", () => {
-    postToolUse("MultiEdit", {
-      edits: [
-        { file_path: "src/c.ts", new_string: "a\nb\nc" },
-        { file_path: "src/d.ts", new_string: "a\nb" },
-      ],
-    });
+  test("StrReplace collects every file edited", () => {
+    postToolUse("StrReplace", { file_path: "src/c.ts", new_string: "a\nb\nc" });
+    postToolUse("StrReplace", { file_path: "src/d.ts", new_string: "a\nb" });
 
     const after = tally();
     assert.deepEqual(after.changedFiles, ["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts"]);
-    assert.equal(after.changedLines, 3 + 22 + 5);
+    assert.equal(after.changedLines, 3 + 22 + 3 + 2);
   });
 
   test("reads leave no tally", () => {
@@ -361,7 +357,7 @@ describe("payload translation", () => {
 
     const after = tally();
     assert.equal(after.changedFiles.length, 4, "still four distinct files");
-    assert.equal(after.changedLines, 3 + 22 + 5 + 2);
+    assert.equal(after.changedLines, 3 + 22 + 3 + 2 + 2);
   });
 
   test("malformed input allows rather than stranding the editor", () => {

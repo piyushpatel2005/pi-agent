@@ -56,6 +56,7 @@ import {
   listRuns,
   openWorkspace,
   resolveRunId,
+  clearActiveRun,
   requireActiveRun,
   requireWorkflow,
   setActiveRun,
@@ -163,6 +164,28 @@ function cmdInit(projectDir: string, args: Args): number {
   console.log("Next:");
   console.log(`  1. Edit ${CONFIG_FILE} — the "facts" decide which steps apply to this project.`);
   console.log('  2. Run `pi start "what you want to build"`.');
+  return 0;
+}
+
+function cmdAbandon(workspace: Workspace, args: Args): number {
+  const reason = flagString(args, "reason");
+  const { runId, paths } = requireActiveRun(workspace.projectDir);
+  const store = createStateStore(paths);
+  const log = createEventLog(paths.events, runId);
+
+  store.update((draft) => {
+    draft.status = RunStatus.Abandoned;
+  });
+  log.append({ type: EventType.RunAbandoned, ...(reason ? { reason } : {}) });
+  clearActiveRun(workspace.projectDir);
+
+  if (wantsJson(args)) {
+    console.log(JSON.stringify({ runId, status: RunStatus.Abandoned, reason: reason ?? null }, null, 2));
+    return 0;
+  }
+
+  console.log(`Abandoned run ${runId}`);
+  if (reason) console.log(`  ${reason}`);
   return 0;
 }
 
@@ -1275,6 +1298,7 @@ Usage
   pi sensors [--step <id>] [--list]        dry-run the current step's checks
   pi checkpoints                           list the boundaries you can rewind to
   pi rewind --to <step> [--yes]            move the run back to a boundary
+  pi abandon [--reason "..."]              stop governing this run; history stays
   pi doctor                                check this project's setup
   pi docs build [--out <dir>]              build a static site from sequenced docs
   pi docs serve [--port <n>] [--host <a>]   build (unless --no-build) and serve locally
@@ -1346,6 +1370,8 @@ function main(argv: string[]): number {
       return cmdCheckpoints(workspace, args);
     case "rewind":
       return cmdRewind(workspace, args);
+    case "abandon":
+      return cmdAbandon(workspace, args);
     case "doctor":
       return cmdDoctor(workspace);
     case "docs":

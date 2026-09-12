@@ -53,6 +53,8 @@ export const RunStatus = {
   /** Stopped at a clean step boundary, resumable. */
   Parked: "parked",
   Completed: "completed",
+  /** Stopped deliberately; history kept, guard released. */
+  Abandoned: "abandoned",
   Failed: "failed",
 } as const;
 

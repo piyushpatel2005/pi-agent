@@ -100,6 +100,13 @@ export function next(
     };
   }
 
+  if (state.status === RunStatus.Abandoned) {
+    return {
+      kind: DirectiveKind.Error,
+      message: "This run was abandoned. Start a new run if you want to continue.",
+    };
+  }
+
   const current = firstUnfinishedStep(state, workflow);
   if (!current) return doneDirective(state, workflow);
 

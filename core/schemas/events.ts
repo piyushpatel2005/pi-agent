@@ -17,6 +17,7 @@ export const EventType = {
   // A run is one invocation of one workflow against one goal.
   RunStarted: "run.started",
   RunCompleted: "run.completed",
+  RunAbandoned: "run.abandoned",
   RunFailed: "run.failed",
 
   // Step lifecycle. Every step transition lands here, which is what makes the
@@ -96,6 +97,9 @@ export const PiEvent = z.discriminatedUnion("type", [
   }),
   event(EventType.RunCompleted, {
     summary: z.string(),
+  }),
+  event(EventType.RunAbandoned, {
+    reason: z.string().optional(),
   }),
   event(EventType.RunFailed, {
     error: z.string(),

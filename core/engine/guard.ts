@@ -122,7 +122,10 @@ export function evaluate(
   //
   // `failed` and `parked` still refuse, for their own reasons: a failed run's
   // plan turned out to be wrong, and a parked run still has work pending.
-  if (state.status === RunStatus.Completed) return ALLOW;
+  // `abandoned` is like `completed`: the human walked away on purpose.
+  if (state.status === RunStatus.Completed || state.status === RunStatus.Abandoned) {
+    return ALLOW;
+  }
 
   if (state.status !== RunStatus.Active) {
     return deny(
