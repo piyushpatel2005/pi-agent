@@ -58,6 +58,30 @@ reason a first run comes out shorter than expected.
 **Facts are frozen into the run at `pi start`.** Editing them afterwards does not
 change a run already underway; start a new run.
 
+### Skipping a step for one run only
+
+Facts are project-wide, so `hasFrontend: true` is right for a project that has
+a frontend even on a run that happens not to touch it — the same setting would
+be wrong to flip just for that one run. To exclude a step from a single run
+without changing `pi.config.json`:
+
+1. Open the state file `pi start` printed (`pi/runs/<runId>/state.json`).
+2. Find the step under `steps` and change its `"status"` to `"skipped"`. Do
+   this **before** the run's first `pi next` or `pi report` call.
+3. Optionally set `"skipReason"` to say why, so `pi status` shows it.
+
+**Edit `status`, never delete the step's key.** The router expects every step
+the workflow defines to have an entry; removing one fails the next `pi next`
+with `state-workflow-mismatch`. Setting `status` to `"skipped"` is the same
+state a facts-driven skip already produces — the router treats the two
+identically.
+
+If a later, still-active step `consumes` an artifact from the step you skipped,
+that step is told the input is missing rather than failing — the same
+tolerance a facts-driven skip already relies on. Treat it the way you already
+would in that case: say plainly that the input does not apply, rather than
+inventing one.
+
 ### The canonical facts
 
 | Fact | Meaning |

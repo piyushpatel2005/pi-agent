@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
@@ -125,6 +125,9 @@ describe("pi CLI: a full run", () => {
     assert.match(out, /ux-design/);
     assert.match(out, /frontend-implementation/);
     assert.match(out, /infrastructure/);
+    // The state file is where a step can be hand-skipped for this run only.
+    assert.match(out, /State: .*state\.json/);
+    assert.match(out, /skip a different step for just this run/);
   });
 
   test("next hands out the first applicable step and starts it", () => {
@@ -367,5 +370,84 @@ describe("pi CLI: project overrides", () => {
     const { code, err } = pi("status");
     assert.equal(code, 1);
     assert.match(err, /not a valid pi config/);
+  });
+});
+
+describe("pi CLI: skipping a step for one run only", () => {
+  function scratchProject(): string {
+    const dir = mkdtempSync(join(tmpdir(), "pi-cli-skip-"));
+    writeFileSync(
+      join(dir, "pi.config.json"),
+      JSON.stringify({ version: 1, defaultWorkflow: "feature" }),
+      "utf-8",
+    );
+    return dir;
+  }
+
+  function piIn(dir: string, ...argv: string[]): { code: number; out: string; err: string } {
+    const result = spawnSync(process.execPath, [CLI, ...argv], { cwd: dir, encoding: "utf-8" });
+    return { code: result.status ?? 1, out: result.stdout, err: result.stderr };
+  }
+
+  test("start's --json output names the state file", () => {
+    const dir = scratchProject();
+    try {
+      const { code, out } = piIn(dir, "start", "Something", "--json");
+      assert.equal(code, 0, out);
+
+      const started = JSON.parse(out);
+      assert.match(started.statePath, /state\.json$/);
+      assert.ok(existsSync(started.statePath), `${started.statePath} should exist`);
+
+      const state = JSON.parse(readFileSync(started.statePath, "utf-8"));
+      assert.equal(state.runId, started.runId);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("hand-editing a step's status to skipped is honored like a facts-driven skip", () => {
+    const dir = scratchProject();
+    try {
+      const { out: startOut } = piIn(dir, "start", "Something", "--json");
+      const { statePath } = JSON.parse(startOut);
+
+      const state = JSON.parse(readFileSync(statePath, "utf-8"));
+      state.steps["ux-design"].status = "skipped";
+      state.steps["ux-design"].skipReason = "manually excluded for this run";
+      writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf-8");
+
+      const status = piIn(dir, "status");
+      assert.equal(status.code, 0, status.out);
+      assert.match(status.out, /\[s\] ux-design.*manually excluded for this run/);
+
+      // The router routes straight past it, the same as a facts-driven skip —
+      // no RouterError, no special-casing for a hand-edited skip.
+      const next = piIn(dir, "next");
+      assert.equal(next.code, 0, next.out);
+      assert.match(next.out, /requirements — business-analyst/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("deleting a step's key instead of skipping it breaks the run", () => {
+    const dir = scratchProject();
+    try {
+      const { out: startOut } = piIn(dir, "start", "Something", "--json");
+      const { statePath } = JSON.parse(startOut);
+
+      // The router walks steps in workflow order and checks each one exists,
+      // so deleting the very first step's key fails on the very next call.
+      const state = JSON.parse(readFileSync(statePath, "utf-8"));
+      delete state.steps.requirements;
+      writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf-8");
+
+      const next = piIn(dir, "next");
+      assert.equal(next.code, 1);
+      assert.match(next.err, /"requirements".*has no record of it/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

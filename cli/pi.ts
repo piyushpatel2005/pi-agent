@@ -313,7 +313,13 @@ function cmdStart(workspace: Workspace, args: Args): number {
   if (wantsJson(args)) {
     console.log(
       JSON.stringify(
-        { runId, workflow: workflow.id, goal, displaced: displaced?.runId ?? null },
+        {
+          runId,
+          workflow: workflow.id,
+          goal,
+          statePath: paths.state,
+          displaced: displaced?.runId ?? null,
+        },
         null,
         2,
       ),
@@ -323,6 +329,7 @@ function cmdStart(workspace: Workspace, args: Args): number {
 
   console.log(`Started ${workflow.name} — ${goal}`);
   console.log(`Run ${runId}`);
+  console.log(`State: ${paths.state}`);
 
   if (displaced) {
     console.log("");
@@ -334,6 +341,13 @@ function cmdStart(workspace: Workspace, args: Args): number {
     console.log("Not applicable to this project (from pi.config.json facts):");
     for (const [id, step] of skipped) console.log(`  ${id} — ${step.skipReason}`);
   }
+  console.log("");
+  // Facts are project-wide; a run can still need to exclude a step that this
+  // project's facts do not already skip. Hand-editing `status` in the state
+  // file above is the supported way — see
+  // docs/reference/09-configuration.md#skipping-a-step-for-one-run-only.
+  console.log('To skip a different step for just this run, edit its "status" to "skipped"');
+  console.log("in the state file above before your first `pi next` or `pi report`.");
   console.log("");
   console.log("Run `pi next` to get the first step.");
   return 0;
