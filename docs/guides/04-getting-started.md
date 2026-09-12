@@ -108,8 +108,8 @@ loop. Hooks you already had are kept, not overwritten.
 **Restart Cursor** so it picks up the hooks.
 
 Without this step pi still routes and records, but nothing consults the guard —
-so budgets become advice rather than limits. Cursor is the only editor with a
-harness today.
+so budgets become advice rather than limits. Cursor and GitHub Copilot both
+have a harness today.
 
 ## Start a run
 

@@ -30,6 +30,15 @@ export const OWNED: readonly string[] = [
   "/pi.config.json",
   "/.cursor/skills/pi/",
   "/.cursor/rules/pi.mdc",
+  // Copilot's hooks file is pi's outright (Copilot combines every file under
+  // `.github/hooks/`, so there is nothing to merge into), unlike Cursor's
+  // shared `hooks.json` above.
+  "/.github/hooks/pi.json",
+  "/.github/instructions/pi.instructions.md",
+  // The subdirectory, not `/.github/skills/`: that directory is Copilot's own
+  // and a project may fill it with other skills, same care taken with
+  // `/.cursor/skills/pi/` above.
+  "/.github/skills/pi/",
 ];
 
 /**
@@ -38,7 +47,11 @@ export const OWNED: readonly string[] = [
  * Anything else in a stale block is dropped on reinstall, so this list can
  * change between versions without leaving entries nobody can account for.
  */
-const REMEMBERED: readonly string[] = ["/.cursor/hooks.json", "/.cursor/cli.json"];
+const REMEMBERED: readonly string[] = [
+  "/.cursor/hooks.json",
+  "/.cursor/cli.json",
+  "/.github/copilot/settings.json",
+];
 
 export function renderBlock(paths: readonly string[]): string {
   return [

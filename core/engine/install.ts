@@ -41,8 +41,14 @@ export class InstallError extends Error {
   }
 }
 
-export const HARNESSES = ["cursor"] as const;
+export const HARNESSES = ["cursor", "copilot"] as const;
 export type Harness = (typeof HARNESSES)[number];
+
+/** What to call a harness back to the person who just ran `pi install`. */
+export const HARNESS_PRODUCT_NAME: Record<Harness, string> = {
+  cursor: "Cursor",
+  copilot: "GitHub Copilot",
+};
 
 /**
  * Reject a harness pi cannot project into.
@@ -71,7 +77,7 @@ export function install(
   options: InstallOptions = {},
 ): InstallResult {
   requireHarness(harness);
-  return installCursor(projectDir, options);
+  return harness === "copilot" ? installCopilot(projectDir, options) : installCursor(projectDir, options);
 }
 
 // ── Cursor ──────────────────────────────────────────────────────────────────
@@ -172,6 +178,167 @@ function warnAboutTrackedFiles(
       "`.gitignore` cannot hide a file git already follows. Run `pi uninstall` and then " +
       `\`git checkout -- ${committed.join(" ")}\` if you would rather it never appeared.`,
   );
+}
+
+// ── Copilot ─────────────────────────────────────────────────────────────────
+//
+// Copilot combines every file under `.github/hooks/*.json` (unlike Cursor's
+// single shared `hooks.json`), so `pi.json` is pi's outright — no merge, no
+// foreign-entry bookkeeping. Registered under the PascalCase, "VS Code
+// Copilot extension format" event names; see harness/copilot/adapter.ts.
+
+const COPILOT_ADAPTER = join(PI_ROOT, "harness", "copilot", "adapter.ts");
+const COPILOT_ADAPTER_PATTERN = /harness[\\/]copilot[\\/]adapter\.ts/;
+const COPILOT_GRANT = "Shell(pi *)";
+
+type CopilotHookEntry = { type: "command"; bash: string; powershell: string; timeoutSec: number };
+
+function copilotHooks(): Record<string, CopilotHookEntry[]> {
+  const run = (target: string): CopilotHookEntry => {
+    const command = `node ${JSON.stringify(COPILOT_ADAPTER)} ${target}`;
+    return { type: "command", bash: command, powershell: command, timeoutSec: 30 };
+  };
+
+  return {
+    SessionStart: [run("session-start")],
+    UserPromptSubmit: [run("human-turn")],
+    PreToolUse: [run("guard")],
+    PostToolUse: [run("record")],
+  };
+}
+
+function isOursCopilot(entry: CopilotHookEntry): boolean {
+  return typeof entry?.bash === "string" && COPILOT_ADAPTER_PATTERN.test(entry.bash);
+}
+
+function installCopilot(projectDir: string, options: InstallOptions): InstallResult {
+  const written: string[] = [];
+  const notes: string[] = [];
+  const githubDir = join(projectDir, ".github");
+
+  if (!existsSync(COPILOT_ADAPTER)) {
+    throw new InstallError(
+      `The pi adapter is missing at ${COPILOT_ADAPTER}. This installation looks incomplete.`,
+    );
+  }
+
+  writeJson(join(githubDir, "hooks", "pi.json"), { version: 1, hooks: copilotHooks() });
+  written.push(".github/hooks/pi.json");
+
+  copyInto(
+    join(PI_ROOT, "harness", "copilot", "instructions", "pi.instructions.md"),
+    join(githubDir, "instructions", "pi.instructions.md"),
+    projectDir,
+    written,
+  );
+  copyInto(
+    join(PI_ROOT, "harness", "copilot", "skills", "pi", "SKILL.md"),
+    join(githubDir, "skills", "pi", "SKILL.md"),
+    projectDir,
+    written,
+  );
+
+  const madeSettings = mergeCopilotPermissions(join(githubDir, "copilot", "settings.json"), written, notes);
+
+  if (!options.noGitignore) {
+    const extra = madeSettings ? ["/.github/copilot/settings.json"] : [];
+    const ignored = applyIgnore(projectDir, extra);
+    if (ignored.wrote) written.push(ignored.wrote);
+    notes.push(...ignored.notes);
+
+    if (!madeSettings) {
+      const committed = tracked(projectDir, [".github/copilot/settings.json"]);
+      if (committed.length > 0) {
+        notes.push(
+          `${committed[0]} is already tracked by git, and pi merged into it. That edit will ` +
+            "show up in your next commit, and `.gitignore` cannot hide a file git already " +
+            `follows. Run \`pi uninstall\` and then \`git checkout -- ${committed[0]}\` if you ` +
+            "would rather it never appeared.",
+        );
+      }
+    }
+  }
+
+  return { written, notes };
+}
+
+/** Same role as Cursor's `mergePermissions`, for Copilot's settings shape. */
+function mergeCopilotPermissions(path: string, written: string[], notes: string[]): boolean {
+  const isOurFile = !existsSync(path);
+  const existing = readJson(path) ?? {};
+  const permissions = (existing.permissions as Record<string, unknown>) ?? {};
+  const allow = Array.isArray(permissions.allow) ? (permissions.allow as string[]) : [];
+
+  if (allow.includes(COPILOT_GRANT)) {
+    notes.push(`${COPILOT_GRANT} was already allowed.`);
+    return isOurFile;
+  }
+
+  writeJson(path, { ...existing, permissions: { ...permissions, allow: [...allow, COPILOT_GRANT] } });
+  written.push(".github/copilot/settings.json");
+
+  return isOurFile;
+}
+
+function uninstallCopilot(projectDir: string, options: UninstallOptions): UninstallResult {
+  const removed: string[] = [];
+  const notes: string[] = [];
+  const githubDir = join(projectDir, ".github");
+
+  revokeCopilotPermission(join(githubDir, "copilot", "settings.json"), projectDir, removed, notes);
+
+  deleteIfPresent(join(githubDir, "hooks", "pi.json"), projectDir, removed);
+  deleteIfPresent(join(githubDir, "instructions", "pi.instructions.md"), projectDir, removed);
+  deleteIfPresent(join(githubDir, "skills", "pi"), projectDir, removed);
+
+  // Not `.github/` itself: GitHub gives that directory its own meaning
+  // (workflows, CODEOWNERS, ...) that a project is likely to fill in later.
+  pruneEmpty(
+    [
+      join(githubDir, "hooks"),
+      join(githubDir, "instructions"),
+      join(githubDir, "skills"),
+      join(githubDir, "copilot"),
+    ],
+    projectDir,
+    removed,
+  );
+
+  if (options.purge) purgeProject(projectDir, removed, notes);
+
+  finishUninstall(projectDir, removed, notes);
+
+  return { removed, notes };
+}
+
+/** Take back `Shell(pi *)`, and nothing else — mirrors `revokePermission`. */
+function revokeCopilotPermission(
+  path: string,
+  projectDir: string,
+  removed: string[],
+  notes: string[],
+): void {
+  const existing = readJson(path);
+  if (!existing) return;
+
+  const permissions = (existing.permissions as Record<string, unknown>) ?? {};
+  const allow = Array.isArray(permissions.allow) ? (permissions.allow as string[]) : [];
+  if (!allow.includes(COPILOT_GRANT)) return;
+
+  const remaining = allow.filter((entry) => entry !== COPILOT_GRANT);
+  const otherPermissions = Object.keys(permissions).filter((key) => key !== "allow");
+  const otherKeys = Object.keys(existing).filter((key) => key !== "permissions");
+
+  if (remaining.length === 0 && otherPermissions.length === 0 && otherKeys.length === 0) {
+    rmSync(path);
+    removed.push(relative(projectDir, path));
+    return;
+  }
+
+  writeJson(path, { ...existing, permissions: { ...permissions, allow: remaining } });
+  removed.push(`${relative(projectDir, path)} (${COPILOT_GRANT} revoked)`);
+
+  if (remaining.length > 0) notes.push(`Left ${remaining.length} other permission(s) in place.`);
 }
 
 // ── Merging ─────────────────────────────────────────────────────────────────
@@ -303,7 +470,12 @@ export function uninstall(
   options: UninstallOptions = {},
 ): UninstallResult {
   requireHarness(harness);
+  return harness === "copilot"
+    ? uninstallCopilot(projectDir, options)
+    : uninstallCursor(projectDir, options);
+}
 
+function uninstallCursor(projectDir: string, options: UninstallOptions): UninstallResult {
   const removed: string[] = [];
   const notes: string[] = [];
   const cursorDir = join(projectDir, ".cursor");
@@ -323,6 +495,17 @@ export function uninstall(
 
   if (options.purge) purgeProject(projectDir, removed, notes);
 
+  finishUninstall(projectDir, removed, notes);
+
+  return { removed, notes };
+}
+
+/**
+ * The tail both harnesses share: keep or drop the `.gitignore` block
+ * depending on whether the project's own pi files (config, run history) are
+ * still around to hide.
+ */
+function finishUninstall(projectDir: string, removed: string[], notes: string[]): void {
   const left = [CONFIG_FILE, "pi/"].filter((path) =>
     existsSync(join(projectDir, path.replace(/\/$/, ""))),
   );
@@ -340,8 +523,6 @@ export function uninstall(
     );
     notes.push("Kept pi's .gitignore block, so what is left stays out of your commits.");
   }
-
-  return { removed, notes };
 }
 
 /**
@@ -489,8 +670,14 @@ function deleteIfPresent(path: string, projectDir: string, removed: string[]): v
   removed.push(relative(projectDir, path));
 }
 
-/** Is pi wired into this project's Cursor configuration? */
+/** Is pi wired into this project's configuration for this harness? */
 export function isInstalled(projectDir: string, harness: string): boolean {
+  if (harness === "copilot") {
+    const hooks = readJson(join(projectDir, ".github", "hooks", "pi.json"));
+    const events = (hooks?.hooks as Record<string, CopilotHookEntry[]>) ?? {};
+    return Object.values(events).some((entries) => entries.some(isOursCopilot));
+  }
+
   if (harness !== "cursor") return false;
 
   const hooks = readJson(join(projectDir, ".cursor", "hooks.json"));

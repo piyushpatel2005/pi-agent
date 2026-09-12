@@ -664,7 +664,8 @@ strip types and run the source directly.
 
 ## Status
 
-Early, but usable end to end on Cursor: the engine, workflows, personas, the
-guard, review receipts, sensors, checkpoints, the CLI, and the Cursor harness.
+Early, but usable end to end: the engine, workflows, personas, the guard,
+review receipts, sensors, checkpoints, the CLI, and two harnesses — Cursor
+and GitHub Copilot.
 
-Still to come: harnesses for Claude Code and Copilot.
+Still to come: a harness for Claude Code.

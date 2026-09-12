@@ -101,7 +101,7 @@ they find at the gate. They never block. Also on the guards page.
 
 **The harness** is the thin layer that wires pi into a specific coding tool:
 hooks pointed at an adapter, a skill that teaches the loop, and permission to
-run `pi` without prompting. Cursor is the only one that exists today. See
+run `pi` without prompting. Cursor and GitHub Copilot both have one today. See
 [Harnesses](../extending/13-harnesses.md).
 
 ## Where to go next

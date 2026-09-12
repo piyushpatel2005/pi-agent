@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { renderBrief, requireAgent } from "../core/engine/agents.ts";
 import { createEventLog } from "../core/engine/event-log.ts";
 import {
+  HARNESS_PRODUCT_NAME,
   InstallError,
   install,
   isInstalled,
@@ -213,7 +214,7 @@ function cmdInstall(workspace: Workspace, args: Args): number {
   for (const note of result.notes) console.log(`\n  note: ${note}`);
 
   console.log("");
-  console.log("Restart Cursor so it picks up the hooks, then:");
+  console.log(`Restart ${HARNESS_PRODUCT_NAME[harness as keyof typeof HARNESS_PRODUCT_NAME] ?? harness} so it picks up the hooks, then:`);
   console.log('  pi start "<what you want to build>"');
   return 0;
 }
@@ -243,7 +244,9 @@ function cmdUninstall(workspace: Workspace, args: Args): number {
     return 0;
   }
 
-  const unwired = result.removed.some((file) => file.startsWith(".cursor"));
+  const unwired = result.removed.some(
+    (file) => file.startsWith(".cursor") || file.startsWith(".github"),
+  );
 
   console.log(unwired ? `Removed pi from ${harness}:` : "Removed pi's files:");
   for (const file of result.removed) console.log(`  ${file}`);
@@ -251,8 +254,12 @@ function cmdUninstall(workspace: Workspace, args: Args): number {
 
   console.log("");
   // Only worth saying when hooks actually came out; a bare --purge changes
-  // nothing Cursor is holding on to.
-  if (unwired) console.log(`Restart ${harness} so it stops calling the hooks.`);
+  // nothing the harness is holding on to.
+  if (unwired) {
+    console.log(
+      `Restart ${HARNESS_PRODUCT_NAME[harness as keyof typeof HARNESS_PRODUCT_NAME] ?? harness} so it stops calling the hooks.`,
+    );
+  }
   if (!purge) console.log("Re-wire it any time with `pi install`.");
   return 0;
 }

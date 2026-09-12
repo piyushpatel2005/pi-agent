@@ -1,11 +1,11 @@
 # Harnesses
 
-**This page answers one question: how do I wire pi into a coding tool that is
-not Cursor?**
+**This page answers one question: how do I wire pi into a coding tool that
+does not have a harness yet?**
 
-**Cursor is the only harness that exists today.** This page describes the seam
-so you can judge the work, and so a port has something to aim at. Nobody has
-done one yet, so treat it as a design description rather than a recipe.
+**Cursor and GitHub Copilot have one today** (`harness/cursor/`,
+`harness/copilot/`). This page describes the seam a third port would follow —
+Copilot's is a worked example of it, not a hypothetical.
 
 ## What a harness is for
 
