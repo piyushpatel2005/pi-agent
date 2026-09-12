@@ -350,15 +350,20 @@ description of your repo, and it is more useful shared than local.
 
 ## Workflows
 
-Four ship with `pi`:
+Five ship with `pi`:
 
 - **`feature`** — requirements, architecture, UX design, backend, frontend,
-  tests, infrastructure, validation. Eight steps, most of them conditional.
+  tests, infrastructure, documentation, validation. Nine steps, most of them
+  conditional.
 - **`quick`** — requirements, implementation, tests. For when you already know
   what you're building.
-- **`bugfix`** — reproduce, diagnose, fix, regression test.
+- **`bugfix`** — reproduce, diagnose, fix, regression test, documentation when
+  the fix is user-visible.
 - **`docs`** — survey, then concepts, guides, reference, and extension pages,
   then an accuracy pass that checks every claim against the code.
+- **`product-discovery`** — survey the product as it exists today, prioritize
+  opportunities with a stakeholder, and produce task briefs with `pi start`
+  commands for follow-on runs.
 
 Inspect one with `pi workflows feature`.
 

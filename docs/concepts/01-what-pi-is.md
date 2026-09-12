@@ -85,8 +85,9 @@ moves pi's own state — your working tree is left exactly as it is.
 
 Five things make up a pi installation. Each has its own page; this is the map.
 
-**Workflows** name the steps and their order. Four ship with pi — `feature`,
-`quick`, `bugfix`, and `docs` — and you can write your own or shadow a shipped
+**Workflows** name the steps and their order. Five ship with pi — `feature`,
+`quick`, `bugfix`, `docs`, and `product-discovery` — and you can write your own
+or shadow a shipped
 one. See [Workflows](../extending/11-workflows.md).
 
 **Personas** are the roles steps are assigned to. Eight ship with pi. Each

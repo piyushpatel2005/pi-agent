@@ -44,6 +44,17 @@
       "tools": ["read", "write-code", "run-command", "write-artifact"],
       "changeBudget": { "maxFiles": 4, "maxLines": 150 },
       "sensors": ["type-check", "linter"]
+    },
+    {
+      "id": "documentation",
+      "agent": "technical-writer",
+      "objective": "Update user-facing documentation if this fix changed behavior, error messages, commands, or configuration someone would read in docs. If the fix was internal only, say so plainly in docs-summary.md and list what you checked.",
+      "consumes": ["reproduction.md", "fix-summary.md", "test-results.md"],
+      "produces": ["docs-summary.md"],
+      "tools": ["read", "search", "write-code", "write-artifact", "run-command", "request-review"],
+      "changeBudget": { "maxFiles": 4, "maxLines": 200 },
+      "requireReviewBefore": ["write-code"],
+      "sensors": ["required-sections", "upstream-coverage", "docs-coverage"]
     }
   ]
 }

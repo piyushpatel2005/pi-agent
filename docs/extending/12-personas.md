@@ -23,7 +23,7 @@ pi agents
 
 | Id | Owns |
 | --- | --- |
-| `business-analyst` | Requirements, acceptance criteria, and verifying delivered work meets them |
+| `business-analyst` | Requirements, acceptance criteria, product discovery from what exists today, routing proposed work to the right workflow, and verifying delivered work meets them |
 | `solution-architect` | Component boundaries, contracts, technology choices, and why |
 | `ui-designer` | Screens, flows, component inventory, states, accessibility |
 | `frontend-developer` | The client, against the approved contract and design |

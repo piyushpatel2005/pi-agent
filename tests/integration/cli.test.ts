@@ -40,7 +40,7 @@ describe("pi CLI", () => {
   test("lists the shipped workflows before any project setup", () => {
     const { code, out } = pi("workflows");
     assert.equal(code, 0);
-    for (const id of ["feature", "quick", "bugfix", "docs"]) {
+    for (const id of ["feature", "quick", "bugfix", "docs", "product-discovery"]) {
       assert.match(out, new RegExp(`^${id}\\b`, "m"));
     }
   });
@@ -133,8 +133,8 @@ describe("pi CLI: a full run", () => {
   test("next hands out the first applicable step and starts it", () => {
     const { code, out } = pi("next");
     assert.equal(code, 0);
-    // 5, not 8: progress counts the steps that apply here, not the ones skipped.
-    assert.match(out, /Step 1\/5: requirements — business-analyst/);
+    // 6, not 9: progress counts the steps that apply here, not the ones skipped.
+    assert.match(out, /Step 1\/6: requirements — business-analyst/);
     assert.match(out, /requirements\.md/);
 
     // Asking twice does not advance: the step is now active, not pending.

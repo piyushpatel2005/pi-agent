@@ -82,10 +82,21 @@
       "sensors": ["docs-coverage"]
     },
     {
+      "id": "documentation",
+      "agent": "technical-writer",
+      "objective": "Update user-facing documentation for anything this feature changed — commands, flags, configuration, workflows, or behavior described in docs. If nothing outside the codebase needed updating, say so plainly in docs-summary.md and list what you checked.",
+      "consumes": ["acceptance-criteria.md", "test-results.md"],
+      "produces": ["docs-summary.md"],
+      "tools": ["read", "search", "write-code", "write-artifact", "run-command", "request-review"],
+      "changeBudget": { "maxFiles": 6, "maxLines": 400 },
+      "requireReviewBefore": ["write-code"],
+      "sensors": ["required-sections", "upstream-coverage", "docs-coverage"]
+    },
+    {
       "id": "validation",
       "agent": "business-analyst",
       "objective": "Confirm every acceptance criterion is met, and say which are not.",
-      "consumes": ["acceptance-criteria.md", "test-results.md"],
+      "consumes": ["acceptance-criteria.md", "test-results.md", "docs-summary.md"],
       "produces": ["validation.md"],
       "tools": ["read", "search", "run-command", "write-artifact"],
       "sensors": ["traceability"]

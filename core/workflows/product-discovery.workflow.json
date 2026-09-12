@@ -1,0 +1,39 @@
+{
+  "id": "product-discovery",
+  "name": "Product discovery",
+  "version": 1,
+  "description": "Survey what exists today, prioritize opportunities with a stakeholder, and package approved ideas as pi start handoffs.",
+  "defaults": {
+    "gate": "approval",
+    "checkpoint": true
+  },
+  "steps": [
+    {
+      "id": "survey",
+      "agent": "business-analyst",
+      "objective": "Read the product as it exists today — features, docs, configuration, and recent runs — and surface product opportunities grounded in evidence, not wishlists.",
+      "produces": ["product-opportunities.md"],
+      "tools": ["read", "search", "ask-user", "write-artifact", "run-command"],
+      "gate": "none",
+      "sensors": ["required-sections"]
+    },
+    {
+      "id": "prioritize",
+      "agent": "business-analyst",
+      "objective": "Work with the stakeholder to rank the opportunities (now / next / later / no), cut what does not hold up, and record what is approved to pursue.",
+      "consumes": ["product-opportunities.md"],
+      "produces": ["prioritized-backlog.md"],
+      "tools": ["read", "search", "ask-user", "write-artifact"],
+      "sensors": ["required-sections", "upstream-coverage"]
+    },
+    {
+      "id": "route",
+      "agent": "business-analyst",
+      "objective": "Turn each approved backlog item into a task brief the conductor can start: goal, recommended workflow, facts, per-run step skips, and a copy-paste pi start command.",
+      "consumes": ["prioritized-backlog.md"],
+      "produces": ["task-briefs.md"],
+      "tools": ["read", "search", "ask-user", "write-artifact", "run-command"],
+      "sensors": ["required-sections", "upstream-coverage"]
+    }
+  ]
+}

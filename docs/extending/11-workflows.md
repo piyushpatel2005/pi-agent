@@ -13,7 +13,7 @@ people.
 
 | Layer | Lives in | Role |
 | --- | --- | --- |
-| Shipped | `core/workflows/` inside the pi installation | The four that come with pi |
+| Shipped | `core/workflows/` inside the pi installation | The five that come with pi |
 | Project | `pi/workflows/` in your repository | Yours |
 
 **Project workflows load second and shadow a shipped one with the same id.** So
@@ -47,6 +47,7 @@ sequenceDiagram
   participant FE as frontend-developer
   participant QA as qa-engineer
   participant DO as devops-engineer
+  participant TW as technical-writer
 
   H->>P: pi start "…" --workflow feature
   P->>BA: requirements
@@ -80,6 +81,9 @@ sequenceDiagram
     DO->>P: completed → approved
   end
 
+  P->>TW: documentation
+  TW->>P: completed → approved
+
   P->>BA: validation
   BA->>P: completed → approved
   P->>H: run completed
@@ -102,8 +106,11 @@ stops an agent from approving its own work — see
 
 Shorter workflows are subsets of the same pattern. `quick` is requirements →
 backend-developer → qa-engineer. `bugfix` is qa-engineer → backend-developer →
-qa-engineer again. `docs` rotates technical-writer steps and ends with a
-business-analyst accuracy pass.
+qa-engineer again, then technical-writer when docs may need updating. `docs`
+rotates technical-writer steps and ends with a
+business-analyst accuracy pass. `product-discovery` is three business-analyst
+steps — survey what exists, prioritize with a stakeholder, route approved items
+into copy-paste `pi start` handoffs — and writes no production code.
 
 ## The smallest workflow that works
 
