@@ -1,7 +1,9 @@
 // Minimal markdown → HTML for the static documentation site.
 //
-// Not a general-purpose renderer — only what pi's own docs use. Keeps the
-// build dependency-free.
+// Not a general-purpose renderer — only what pi's own docs use. Code fences are
+// highlighted at build time via Shiki (same engine VitePress and Next.js use).
+
+import { highlightCode } from "./highlight.ts";
 
 function escapeHtml(text: string): string {
   return text
@@ -51,7 +53,7 @@ function renderTable(rows: string[]): string {
 }
 
 /** Convert a markdown document to an HTML fragment. */
-export function markdownToHtml(markdown: string): string {
+export async function markdownToHtml(markdown: string): Promise<string> {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const parts: string[] = [];
   let index = 0;
@@ -67,11 +69,11 @@ export function markdownToHtml(markdown: string): string {
         block.push(lines[index]!);
         index++;
       }
+      const source = block.join("\n").replace(/\n$/, "");
       if (language === "mermaid") {
-        parts.push(`<pre class="mermaid">${escapeHtml(block.join("\n"))}</pre>`);
+        parts.push(`<pre class="mermaid">${escapeHtml(source)}</pre>`);
       } else {
-        const className = language ? ` class="language-${escapeHtml(language)}"` : "";
-        parts.push(`<pre><code${className}>${escapeHtml(block.join("\n"))}</code></pre>`);
+        parts.push(await highlightCode(source, language));
       }
       index++;
       continue;

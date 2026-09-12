@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "mermaid": "^11.17.2",
+    "shiki": "^3.23.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -294,9 +294,11 @@ Writes a static HTML site from the sequenced markdown files under the project's
 `docs.dir` (default `docs/`). Only files matching `NN-slug.md` are included —
 for example `01-what-pi-is.md`, `02-the-run-model.md`.
 
-Markdown is rendered to HTML. Fenced blocks marked `mermaid` are rendered as
-diagrams using the bundled [Mermaid](https://mermaid.js.org/) library copied
-into `assets/mermaid/`.
+Markdown is rendered to HTML. Fenced code blocks are syntax-highlighted at
+build time with [Shiki](https://shiki.style/) (GitHub light/dark themes, the
+same engine VitePress and Next.js docs use). Fences marked `mermaid` are
+rendered as diagrams using the bundled [Mermaid](https://mermaid.js.org/)
+library copied into `assets/mermaid/`.
 
 ```bash
 pi docs build
@@ -305,10 +307,17 @@ pi docs build --out website/static/docs
 
 Output:
 
-- `index.html` — ordered table of contents
-- `pages/*.html` — one page per markdown file
+- `index.html` — landing page with the full reading sequence
+- `pages/readme.html` — the repository `README.md`, first in the sequence
+- `pages/*.html` — one page per sequenced markdown file
 - `manifest.json` — machine-readable order for other tools
+- `assets/theme.css` — shared site theme
 - `assets/mermaid/` — Mermaid runtime for diagram rendering
+
+Every page includes previous/next links through **README → 01 → 02 → …** in
+order. Pushes to `main` deploy the built site to GitHub Pages via
+`.github/workflows/docs.yml` (enable Pages → **GitHub Actions** in the
+repository settings).
 
 Does not touch the run. Refuses with a non-zero exit when no sequenced pages
 are found.

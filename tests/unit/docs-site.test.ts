@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { test, describe } from "node:test";
@@ -24,22 +24,34 @@ describe("docs site", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("buildStaticSite writes index, pages, and manifest", () => {
+  test("buildStaticSite writes index, readme, pages, theme, and manifest", async () => {
     const root = mkdtempSync(join(tmpdir(), "pi-docs-"));
     const docs = join(root, "docs", "concepts");
     mkdirSync(docs, { recursive: true });
+    writeFileSync(join(root, "README.md"), "# Project README\n\nWelcome.\n");
     writeFileSync(
       join(docs, "01-sample.md"),
       "# Sample\n\nSee [Next](../guides/02-next.md).\n",
     );
 
     const out = join(root, "site");
-    const result = buildStaticSite(root, "site", "docs");
+    const result = await buildStaticSite(root, "site", "docs");
 
     assert.equal(result.pages.length, 1);
-    assert.ok(readFileSync(join(out, "index.html"), "utf8").includes("Sample"));
+    assert.equal(result.readmeBuilt, true);
+    assert.ok(existsSync(join(out, "assets", "theme.css")));
+    assert.ok(readFileSync(join(out, "index.html"), "utf8").includes("hero"));
+    assert.ok(readFileSync(join(out, "pages", "readme.html"), "utf8").includes("<h1>Project README</h1>"));
     assert.ok(readFileSync(join(out, "pages", "01-sample.html"), "utf8").includes("<h1>Sample</h1>"));
+    assert.match(readFileSync(join(out, "pages", "01-sample.html"), "utf8"), /← README/);
+    assert.match(readFileSync(join(out, "pages", "readme.html"), "utf8"), /Sample →/);
     assert.deepEqual(JSON.parse(readFileSync(join(out, "manifest.json"), "utf8")), [
+      {
+        order: 0,
+        title: "Project README",
+        source: "README.md",
+        html: "pages/readme.html",
+      },
       {
         order: 1,
         title: "Sample",
@@ -50,9 +62,15 @@ describe("docs site", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  test("mermaid fences become pre.mermaid blocks", () => {
-    const html = markdownToHtml("```mermaid\ngraph TD; A-->B\n```");
+  test("mermaid fences become pre.mermaid blocks", async () => {
+    const html = await markdownToHtml("```mermaid\ngraph TD; A-->B\n```");
     assert.match(html, /<pre class="mermaid">graph TD; A--&gt;B<\/pre>/);
+  });
+
+  test("code fences are syntax-highlighted with Shiki", async () => {
+    const html = await markdownToHtml('```bash\necho hello\n```');
+    assert.match(html, /<pre class="shiki/);
+    assert.match(html, /echo/);
   });
 
   test("ignores markdown files without a sequence prefix", () => {

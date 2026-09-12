@@ -165,7 +165,10 @@ pi report --step <id> --result completed    # what happened
 `pi --help` lists every command and flag. Long-form pages under `docs/` use a
 two-digit sequence prefix (`01-what-pi-is.md`, …). Build and serve them locally
 with `pi docs serve` (markdown + Mermaid diagrams), or `pi docs build` for static
-output only.
+output only. The site reads in order: **README → sequenced docs**, with
+previous/next navigation on every page. Pushes to `main` deploy to GitHub Pages
+via `.github/workflows/docs.yml` (enable **GitHub Actions** as the Pages source
+in repository settings).
 
 **[Commands](docs/reference/08-commands.md)** documents what each one requires of
 the run, what it produces, and what it refuses — including the step state

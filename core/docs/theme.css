@@ -1,0 +1,552 @@
+/* pi documentation site — shared theme for index and sequenced pages. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f8f9fb;
+  --bg-elevated: #ffffff;
+  --text: #1a1d26;
+  --text-muted: #5c6370;
+  --border: #dfe3eb;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-subtle: #eff6ff;
+  --code-bg: #f1f5f9;
+  --pre-bg: #0f172a;
+  --pre-text: #e2e8f0;
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.04);
+  --radius: 0.625rem;
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  --max-width: 46rem;
+  --nav-width: 17rem;
+  --header-height: 3.35rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1117;
+    --bg-elevated: #171a22;
+    --text: #eef0f4;
+    --text-muted: #9aa3b2;
+    --border: #2a3140;
+    --accent: #60a5fa;
+    --accent-hover: #93c5fd;
+    --accent-subtle: #172554;
+    --code-bg: #1e2430;
+    --pre-bg: #0b0f16;
+    --pre-text: #e2e8f0;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.25);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font: 1rem/1.7 var(--font-sans);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+/* ── Site header ─────────────────────────────────────────────────────────── */
+
+.site-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  height: var(--header-height);
+  padding: 0 1.25rem;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+}
+
+.site-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.site-brand:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.site-brand span {
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.site-header nav.header-links {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.9rem;
+}
+
+.site-header nav.header-links a {
+  color: var(--text-muted);
+}
+
+.site-header nav.header-links a:hover,
+.site-header nav.header-links a[aria-current="page"] {
+  color: var(--accent);
+}
+
+/* ── Layout: fixed left sidebar + scrolling content ──────────────────────── */
+
+.layout {
+  display: block;
+  padding-top: var(--header-height);
+  min-height: 100vh;
+}
+
+/* ── Sidebar TOC ─────────────────────────────────────────────────────────── */
+
+.sidebar {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  z-index: 10;
+  width: var(--nav-width);
+  height: calc(100vh - var(--header-height));
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 1rem 0.65rem 2rem;
+}
+
+.sidebar-nav {
+  display: block;
+}
+
+.sidebar .sidebar-summary {
+  display: none;
+}
+
+.sidebar .toc-label {
+  margin: 0 0 0.65rem;
+  padding: 0 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sidebar .sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.sidebar section h2 {
+  margin: 0 0 0.35rem;
+  padding: 0 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sidebar ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar li {
+  margin: 0.05rem 0;
+}
+
+.sidebar li a {
+  display: block;
+  padding: 0.32rem 0.55rem;
+  border-radius: 0.375rem;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  line-height: 1.35;
+  border-left: 2px solid transparent;
+}
+
+.sidebar li a:hover {
+  color: var(--accent);
+  background: var(--accent-subtle);
+  text-decoration: none;
+}
+
+.sidebar li a[aria-current="page"] {
+  color: var(--accent);
+  font-weight: 600;
+  background: var(--accent-subtle);
+  border-left-color: var(--accent);
+}
+
+@media (min-width: 768px) {
+  .sidebar .sidebar-panel {
+    display: block;
+    border: none;
+  }
+
+  .sidebar .sidebar-panel > .sidebar-nav {
+    display: block;
+  }
+}
+
+/* Narrow viewports: collapse nav behind a summary control */
+@media (max-width: 767px) {
+  :root {
+    --nav-width: 100%;
+  }
+
+  .sidebar {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    height: auto;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 0;
+  }
+
+  .sidebar .sidebar-summary {
+    display: block;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .sidebar .sidebar-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .sidebar .sidebar-panel:not([open]) .sidebar-nav {
+    display: none;
+  }
+
+  .sidebar .sidebar-panel[open] {
+    padding-bottom: 0.75rem;
+  }
+
+  .sidebar .toc-label {
+    display: none;
+  }
+}
+
+/* ── Main content ────────────────────────────────────────────────────────── */
+
+main {
+  min-width: 0;
+  margin-left: var(--nav-width);
+  padding: 1.75rem 2rem 4rem;
+  max-width: calc(var(--max-width) + 4rem);
+}
+
+@media (max-width: 767px) {
+  main {
+    margin-left: 0;
+    padding: 1.25rem 1rem 3rem;
+  }
+}
+
+main > h1:first-child {
+  margin-top: 0;
+  font-size: clamp(1.85rem, 4vw, 2.35rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+main h2 {
+  margin: 2.25rem 0 0.75rem;
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+main h3 {
+  margin: 1.75rem 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+main p,
+main ul,
+main ol {
+  margin: 0.85rem 0;
+}
+
+main li {
+  margin: 0.35rem 0;
+}
+
+main hr {
+  margin: 2rem 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+main code {
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  padding: 0.06em 0.28em;
+  border-radius: 0.25rem;
+  background: var(--code-bg);
+}
+
+main pre {
+  overflow-x: auto;
+  margin: 0.85rem 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: calc(var(--radius) - 0.125rem);
+  background: var(--pre-bg);
+  color: var(--pre-text);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  box-shadow: none;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+main pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* Shiki — dual GitHub themes (build-time, follows prefers-color-scheme) */
+main pre.shiki {
+  padding: 0.55rem 0.7rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  box-shadow: none;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+main pre.shiki code {
+  display: block;
+  font-family: var(--font-mono);
+  line-height: 1.35;
+}
+
+main pre.shiki .line {
+  display: block;
+  line-height: 1.35;
+}
+
+@media (prefers-color-scheme: dark) {
+  main pre.shiki,
+  main pre.shiki span {
+    color: var(--shiki-dark) !important;
+    font-style: var(--shiki-dark-font-style) !important;
+    font-weight: var(--shiki-dark-font-weight) !important;
+    text-decoration: var(--shiki-dark-text-decoration) !important;
+  }
+
+  main pre.shiki {
+    background-color: var(--shiki-dark-bg) !important;
+  }
+}
+
+main pre.mermaid {
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+  padding: 0.5rem 0;
+}
+
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+main table {
+  width: 100%;
+  margin: 1.25rem 0;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+main th,
+main td {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+main th {
+  background: color-mix(in srgb, var(--bg) 50%, var(--bg-elevated));
+  font-weight: 600;
+}
+
+/* ── Landing hero (index) ────────────────────────────────────────────────── */
+
+.hero {
+  padding: 2.5rem 0 1rem;
+}
+
+.hero h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.hero .lead {
+  margin: 0 0 1.75rem;
+  font-size: 1.15rem;
+  color: var(--text-muted);
+  max-width: 38rem;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.hero-hint {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.hero-toc {
+  display: none;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.65rem 1.1rem;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  color: #fff;
+  text-decoration: none;
+}
+
+.btn-secondary {
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* ── Sequential prev / next footer ───────────────────────────────────────── */
+
+.sequence-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.sequence-nav a {
+  flex: 1 1 10rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.sequence-nav a:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+}
+
+.sequence-nav a .label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sequence-nav a .title {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.sequence-nav a.sequence-readme {
+  flex: 0 1 auto;
+  min-width: 6rem;
+  text-align: center;
+  justify-content: center;
+}
+
+.sequence-nav .sequence-spacer {
+  flex: 1 1 0;
+}

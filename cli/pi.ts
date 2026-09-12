@@ -1071,13 +1071,13 @@ function cmdRewind(workspace: Workspace, args: Args): number {
   return 0;
 }
 
-function cmdDocs(workspace: Workspace, args: Args): number {
+async function cmdDocs(workspace: Workspace, args: Args): Promise<number> {
   const [subcommand] = args.positional;
   const outDir = flagString(args, "out") ?? "dist/docs";
   const docsDir = workspace.config.docs.dir;
 
   if (subcommand === "build") {
-    const result = buildStaticSite(workspace.projectDir, outDir, docsDir);
+    const result = await buildStaticSite(workspace.projectDir, outDir, docsDir);
 
     if (result.pages.length === 0) {
       console.error(
@@ -1101,7 +1101,7 @@ function cmdDocs(workspace: Workspace, args: Args): number {
     const absoluteOut = join(workspace.projectDir, outDir);
 
     if (!skipBuild) {
-      const result = buildStaticSite(workspace.projectDir, outDir, docsDir);
+      const result = await buildStaticSite(workspace.projectDir, outDir, docsDir);
       if (result.pages.length === 0) {
         console.error(
           `No sequenced pages found under ${docsDir}/. ` +
@@ -1306,7 +1306,7 @@ Usage
 
 Results for --result: completed, needs-review, approved, rejected, failed`;
 
-function main(argv: string[]): number {
+async function main(argv: string[]): Promise<number> {
   // `pi engine next` and `pi next` are the same thing: the conductor skill uses
   // the namespaced form, humans use the short one.
   const tokens = argv[0] === "engine" ? argv.slice(1) : argv;
@@ -1376,7 +1376,7 @@ function main(argv: string[]): number {
       return cmdDoctor(workspace);
     case "docs":
     case "doc":
-      return cmdDocs(workspace, args);
+      return await cmdDocs(workspace, args);
     default:
       console.error(`Unknown command "${verb}".\n`);
       console.error(USAGE);
@@ -1385,7 +1385,7 @@ function main(argv: string[]): number {
 }
 
 try {
-  process.exitCode = main(process.argv.slice(2));
+  process.exitCode = await main(process.argv.slice(2));
 } catch (cause) {
   if (
     cause instanceof WorkspaceError ||
