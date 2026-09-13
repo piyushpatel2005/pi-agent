@@ -28,6 +28,54 @@ function isTableSeparator(line: string): boolean {
   return /^\|[\s:|-]+\|$/.test(line.trim());
 }
 
+function parseListItem(line: string): { type: "ul" | "ol"; content: string } | null {
+  const unordered = line.match(/^[-*]\s+(.*)$/);
+  if (unordered) return { type: "ul", content: unordered[1]! };
+
+  const ordered = line.match(/^\d+\.\s+(.*)$/);
+  if (ordered) return { type: "ol", content: ordered[1]! };
+
+  return null;
+}
+
+function isListItem(line: string): boolean {
+  return parseListItem(line) !== null;
+}
+
+function isListContinuation(line: string): boolean {
+  return line.trim() !== "" && !isListItem(line) && /^ {2,}/.test(line);
+}
+
+function renderList(lines: string[], start: number): { html: string; next: number } {
+  const first = parseListItem(lines[start]!);
+  if (!first) return { html: "", next: start };
+
+  const tag = first.type;
+  const items: string[] = [];
+  let index = start;
+
+  while (index < lines.length) {
+    const line = lines[index]!;
+    if (line.trim() === "") {
+      index++;
+      break;
+    }
+
+    const item = parseListItem(line);
+    if (!item || item.type !== tag) break;
+
+    let content = item.content;
+    index++;
+    while (index < lines.length && isListContinuation(lines[index]!)) {
+      content += ` ${lines[index]!.trim()}`;
+      index++;
+    }
+    items.push(`<li>${inlineMarkdown(content)}</li>`);
+  }
+
+  return { html: `<${tag}>${items.join("")}</${tag}>`, next: index };
+}
+
 function renderTable(rows: string[]): string {
   const cells = rows
     .filter((row) => !isTableSeparator(row))
@@ -108,6 +156,13 @@ export async function markdownToHtml(markdown: string): Promise<string> {
       continue;
     }
 
+    if (isListItem(line)) {
+      const list = renderList(lines, index);
+      parts.push(list.html);
+      index = list.next;
+      continue;
+    }
+
     const paragraph: string[] = [line];
     index++;
     while (
@@ -115,7 +170,8 @@ export async function markdownToHtml(markdown: string): Promise<string> {
       lines[index]!.trim() !== "" &&
       !lines[index]!.startsWith("#") &&
       !lines[index]!.startsWith("```") &&
-      !isTableRow(lines[index]!)
+      !isTableRow(lines[index]!) &&
+      !isListItem(lines[index]!)
     ) {
       paragraph.push(lines[index]!);
       index++;

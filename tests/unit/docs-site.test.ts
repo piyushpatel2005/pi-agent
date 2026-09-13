@@ -73,6 +73,20 @@ describe("docs site", () => {
     assert.match(html, /echo/);
   });
 
+  test("unordered lists render with wrapped items", async () => {
+    const html = await markdownToHtml(
+      "- **Seven personas** — analyst,\n  architect, engineer.\n- **Router.** Next step.\n",
+    );
+    assert.match(html, /<ul><li><strong>Seven personas<\/strong>/);
+    assert.match(html, /architect, engineer\./);
+    assert.match(html, /<li><strong>Router\.<\/strong> Next step\.<\/li><\/ul>/);
+  });
+
+  test("ordered lists render numbered items", async () => {
+    const html = await markdownToHtml("1. First step.\n2. Second step.\n");
+    assert.equal(html, "<ol><li>First step.</li><li>Second step.</li></ol>");
+  });
+
   test("ignores markdown files without a sequence prefix", () => {
     const root = mkdtempSync(join(tmpdir(), "pi-docs-"));
     const docs = join(root, "docs-only");
