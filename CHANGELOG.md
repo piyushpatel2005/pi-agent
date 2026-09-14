@@ -12,6 +12,8 @@ so when it does.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-14
+
 ### Added
 
 - An eighth persona, `technical-writer`, for documentation aimed at people
