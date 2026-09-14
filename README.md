@@ -78,12 +78,13 @@ In the project you want to work on:
 ```bash
 cd ~/code/my-project
 pi init
-pi install     # wire pi into Cursor's hooks, then restart Cursor
+pi install     # prompts for Cursor or Copilot; then restart that editor
 ```
 
 `pi init` writes `pi.config.json` and a `pi/workflows/` directory. `pi install`
-wires the guard into your coding tool — without it, `pi` still routes and
-records, but nothing consults the guard, so budgets are advice again.
+wires the guard into **one** tool at a time (`--harness cursor` or `--harness
+copilot` to skip the prompt). Without install, `pi` still routes and records,
+but nothing consults the guard, so budgets are advice again.
 
 Open the config and set the **facts** — they decide which steps apply to your
 project:
@@ -255,7 +256,12 @@ conductor dispatches, so a worker can't quietly become an orchestrator and bury
 a decision one level below what the log can see.
 
 To change how a role works, drop a file with the same `id` in `pi/agents/`. It
-replaces the shipped one.
+replaces the shipped one. `pi agents --eject <id>` writes that file for you, as
+a copy of the shipped persona, so you start from something that works.
+
+That directory is gitignored, so a retuned role is yours alone until you
+`git add -f` it — experimenting with a persona costs nothing, sharing one is a
+decision.
 
 **[Personas](docs/extending/12-personas.md)** covers every frontmatter field, how
 tool grants resolve, and what belongs in the body.

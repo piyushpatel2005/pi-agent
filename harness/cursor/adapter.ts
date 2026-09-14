@@ -116,6 +116,20 @@ const HUMAN_TURN = "human-turn";
  */
 const SHELL_METACHARACTERS = /[;&|<>`$()]/;
 
+/**
+ * Is this a command the control plane answers, rather than the guard?
+ *
+ * `pi agents` reads a persona, but `pi agents --eject` writes one into the
+ * repository — and a persona is the rules the run is being judged by. So the
+ * eject form falls through to the guard like any other command that changes the
+ * project, and is allowed only where the step grants running commands.
+ */
+function isControlCommand(command: string, verb: string): boolean {
+  if (!CONTROL_VERBS.has(verb)) return false;
+
+  return !(verb === "agents" && /(^|\s)--eject(=|\s|$)/.test(command));
+}
+
 /** The pi verb this command invokes, or null if it is not a bare pi command. */
 function piVerb(command: string): string | null {
   if (SHELL_METACHARACTERS.test(command)) return null;
@@ -288,7 +302,7 @@ function guard(input: CursorInput): string {
       });
     }
 
-    if (verb !== null && CONTROL_VERBS.has(verb)) return ALLOW;
+    if (verb !== null && isControlCommand(command, verb)) return ALLOW;
   }
 
   const workspace = openWorkspace(projectDir);

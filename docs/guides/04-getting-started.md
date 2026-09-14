@@ -101,15 +101,32 @@ Full key list: [Configuration](../reference/09-configuration.md).
 pi install
 ```
 
-This merges pi's hooks into `.cursor/hooks.json`, grants permission to run `pi`
-without prompting, and installs a skill and a rule that teach the agent the
-loop. Hooks you already had are kept, not overwritten.
+`pi install` asks which tool to harness (Cursor or GitHub Copilot) unless you
+pass a flag or run in a non-interactive shell:
 
-**Restart Cursor** so it picks up the hooks.
+```bash
+pi install --harness cursor    # only Cursor hooks, skills, and permissions
+pi install --harness copilot   # only GitHub Copilot hooks and instructions
+pi install --yes               # skip the prompt; use harness from pi.config.json
+```
+
+Each install touches **one** harness. Installing Copilot does not add Cursor
+files, and vice versa. You can wire both into the same repo later with a second
+`pi install --harness <other>` if you use both tools.
+
+If `pi.config.json` is not there yet, `pi install` creates it (with the harness
+you chose), `pi/workflows/`, and the usual `.gitignore` block — you do not have
+to run `pi init` first, though `pi init` is still the right place to set
+`facts` before your first run.
+
+This merges pi's hooks into the chosen tool's config, grants permission to run
+`pi` without prompting, and installs the conductor skill. Hooks you already had
+are kept, not overwritten.
+
+**Restart the editor** (Cursor or Copilot) so it picks up the hooks.
 
 Without this step pi still routes and records, but nothing consults the guard —
-so budgets become advice rather than limits. Cursor and GitHub Copilot both
-have a harness today.
+so budgets become advice rather than limits.
 
 ## Start a run
 

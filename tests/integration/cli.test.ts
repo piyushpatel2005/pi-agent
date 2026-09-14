@@ -70,6 +70,31 @@ describe("pi CLI", () => {
     assert.match(out, /Budget: 8 files \/ 300 lines/);
   });
 
+  test("ejects a persona into the project, and says no to an id it does not ship", () => {
+    const ejected = join(project, "pi", "agents", "qa-engineer.md");
+
+    try {
+      const { code, out } = pi("agents", "--eject", "qa-engineer");
+      assert.equal(code, 0, out);
+      assert.match(out, /Wrote pi\/agents\/qa-engineer\.md/);
+      assert.match(readFileSync(ejected, "utf-8"), /^---\nid: qa-engineer\n/);
+
+      const second = pi("agents", "--eject", "qa-engineer");
+      assert.equal(second.code, 1);
+      assert.match(second.err, /already exists/);
+
+      // An AgentError reaching the top level used to print a stack trace.
+      const missing = pi("agents", "--eject", "scrum-master");
+      assert.equal(missing.code, 1);
+      assert.match(missing.err, /pi ships no persona "scrum-master"/);
+      assert.doesNotMatch(missing.err, /at \w+ \(/);
+    } finally {
+      // The project is shared by every test in this file, and an override
+      // would follow this one into them.
+      rmSync(join(project, "pi", "agents"), { recursive: true, force: true });
+    }
+  });
+
   test("every shipped workflow compiles against the shipped roster", () => {
     const { code, out } = pi("doctor");
     assert.equal(code, 0, out);

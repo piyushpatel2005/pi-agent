@@ -123,6 +123,20 @@ const settingsPath = (dir: string) => join(dir, ".github", "copilot", "settings.
 // ── Install (R1, R2) ─────────────────────────────────────────────────────────
 
 describe("pi install --harness copilot", () => {
+  test("creates pi.config.json when the project has no config yet", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-copilot-fresh-"));
+    projects.push(dir);
+
+    assert.equal(existsSync(join(dir, "pi.config.json")), false);
+    const { code, out } = pi(dir, "install", "--harness", "copilot", "--yes");
+    assert.equal(code, 0, out);
+
+    const config = readJson<{ harness: string }>(dir, "pi.config.json");
+    assert.equal(config.harness, "copilot");
+    assert.ok(existsSync(join(dir, "pi", "workflows")));
+    assert.match(out, /pi\.config\.json/);
+  });
+
   test("writes the hooks file, instructions, and skill", () => {
     const dir = project();
     const { code, out } = pi(dir, "install");
@@ -316,7 +330,7 @@ describe("cursor and copilot installs do not see each other", () => {
     assert.equal(pi(dir, "doctor").out.includes("wired into copilot"), false);
 
     pi(dir, "install", "--harness", "copilot");
-    assert.match(pi(dir, "doctor").out, /wired into cursor/); // config still says cursor
+    assert.match(pi(dir, "doctor").out, /wired into copilot/); // config follows last install
     assert.equal(existsSync(join(dir, ".github", "hooks", "pi.json")), true);
     assert.equal(existsSync(join(dir, ".cursor", "hooks.json")), true);
   });
@@ -408,6 +422,15 @@ describe("the copilot adapter during a run", () => {
     const dir = started();
     assert.equal(shell(dir, "pi status"), null);
     assert.equal(shell(dir, "pi next"), null);
+    assert.equal(shell(dir, "pi agents qa-engineer"), null);
+  });
+
+  test("ejecting a persona is not a control verb; it writes one", () => {
+    const dir = started();
+    const denied = shell(dir, "pi agents --eject qa-engineer");
+
+    assert.equal(denied?.permissionDecision, "deny");
+    assert.match(denied!.permissionDecisionReason, /does not grant `run-command`/);
   });
 
   test("pi human-turn is denied with a reason, not silently allowed", () => {

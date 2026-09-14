@@ -53,7 +53,9 @@ The run itself has four:
 ### `pi init`
 
 Writes `pi.config.json` and `pi/workflows/`, and adds a marked block to
-`.gitignore` covering pi's config and run history.
+`.gitignore` covering pi's config, run history, and persona overrides. Sets the `harness` field
+(Cursor or Copilot) — interactively in a terminal, or with `--harness
+cursor|copilot`, or `--yes` for the default (`cursor`).
 
 Refuses to overwrite an existing config without `--force`. `--no-gitignore`
 skips the ignore block.
@@ -63,21 +65,36 @@ nor produces run state.
 
 ### `pi install`
 
-Merges pi into your coding tool: hooks into `.cursor/hooks.json`, permission to
-run `pi` unprompted into `.cursor/cli.json`, plus a skill and a rule under
-`.cursor/`.
+Wires pi into **one** coding tool at a time. In an interactive terminal, `pi
+install` prompts for Cursor or GitHub Copilot unless you pass `--harness` or
+`--yes` (use the harness from `pi.config.json` without asking).
+
+```bash
+pi install --harness cursor
+pi install --harness copilot
+pi install --yes
+```
+
+| Harness | What gets written |
+| --- | --- |
+| `cursor` | `.cursor/hooks.json`, `.cursor/cli.json`, skill, rule |
+| `copilot` | `.github/hooks/pi.json`, Copilot instructions, skill |
 
 **Merges rather than overwrites.** Hooks you already had survive. Requires a
-restart of your editor to take effect.
+restart of the editor you wired in.
+
+If you pick a harness that differs from `pi.config.json`, install updates the
+`harness` field to match.
 
 Without this, pi still routes and records, but nothing consults the guard —
 budgets become advice.
 
 ### `pi uninstall`
 
-The exact inverse. Unpicks pi's hooks and permissions, deletes the skill and
-rule, and removes files and directories the removal left empty rather than
-leaving husks. Anything it did not add, it leaves.
+The inverse for **one** harness (`--harness` or the same prompt as install).
+Unpicks that tool's hooks and permissions, deletes the skill and instructions
+pi added, and removes directories the removal left empty. Anything it did not
+add, it leaves.
 
 Keeps `pi.config.json` and `pi/` — including run history — unless you pass
 `--purge`. `--purge` tells you how many runs it is about to discard first,
@@ -277,7 +294,16 @@ the state against the digest recorded on the checkpoint before it moves.
 
 ### `pi workflows` / `pi agents`
 
-List, or show one in full. Project-local definitions are marked `(project)`.
+List, or show one in full. `pi workflows` marks project-local definitions
+`(project)`.
+
+`pi agents --eject <id>` copies a shipped persona to `pi/agents/<id>.md`, where
+it shadows the shipped one for this project. It refuses to overwrite an existing
+file without `--force`. This writes the persona file; `pi agents <id>` prints a
+rendered view that has no frontmatter and will not parse as one.
+
+`pi/agents/` is inside pi's `.gitignore` block, so an ejected persona is yours
+alone until you `git add -f` it. See [Personas](../extending/12-personas.md).
 
 ### `pi sensors`
 

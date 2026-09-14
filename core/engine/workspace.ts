@@ -20,8 +20,9 @@ import { RunState, RunStatus, StepStatus } from "../schemas/state.ts";
 import type { CompiledWorkflow } from "../schemas/workflow.ts";
 import { loadAgents, rosterContext, type AgentRoster } from "./agents.ts";
 import { compileWorkflow, type CompileContext, type WorkflowIssue } from "./compile.ts";
-import { SENSOR_IDS } from "./sensors.ts";
+import { applyIgnore } from "./gitignore.ts";
 import { runPaths, runsDir, type RunPaths } from "./paths.ts";
+import { SENSOR_IDS } from "./sensors.ts";
 
 export const CONFIG_FILE = "pi.config.json";
 
@@ -109,6 +110,72 @@ function readConfig(configPath: string): ProjectConfig {
   }
 
   return parsed.data;
+}
+
+/** Default `pi.config.json` body for a new project. */
+export function newProjectConfig(harness: string): Record<string, unknown> {
+  return {
+    version: 1,
+    harness,
+    defaultWorkflow: "feature",
+    docs: {
+      dir: "docs",
+      files: ["README.md"],
+      required: true,
+      exempt: ["tests/", "test/", "**/*.test.*", "dist/"],
+    },
+    facts: {
+      hasFrontend: true,
+      hasBackend: true,
+      needsInfra: false,
+    },
+    checks: {},
+  };
+}
+
+/** Update `harness` in `pi.config.json` after an interactive install choice. */
+export function setProjectHarness(projectDir: string, harness: string): void {
+  const configPath = join(projectDir, CONFIG_FILE);
+  const raw = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>;
+  raw.harness = harness;
+  writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`, "utf-8");
+}
+
+export type ProjectScaffoldOptions = {
+  noGitignore?: boolean;
+};
+
+/**
+ * Create `pi.config.json`, `pi/workflows/`, and the gitignore block when missing.
+ * Updates `harness` in an existing config when it differs.
+ */
+export function ensureProjectScaffold(
+  projectDir: string,
+  harness: string,
+  options: ProjectScaffoldOptions = {},
+): string[] {
+  const written: string[] = [];
+  const configPath = join(projectDir, CONFIG_FILE);
+
+  if (!existsSync(configPath)) {
+    writeFileSync(configPath, `${JSON.stringify(newProjectConfig(harness), null, 2)}\n`, "utf-8");
+    written.push(CONFIG_FILE);
+  } else if (readConfig(configPath).harness !== harness) {
+    setProjectHarness(projectDir, harness);
+  }
+
+  const workflowsDir = join(projectDir, "pi", "workflows");
+  if (!existsSync(workflowsDir)) {
+    mkdirSync(workflowsDir, { recursive: true });
+    written.push("pi/workflows/");
+  }
+
+  if (!options.noGitignore) {
+    const ignored = applyIgnore(projectDir, []);
+    if (ignored.wrote) written.push(ignored.wrote);
+  }
+
+  return written;
 }
 
 function loadWorkflowsFrom(

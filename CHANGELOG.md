@@ -20,6 +20,26 @@ so when it does.
 - A fourth shipped workflow, `docs`: survey the project, write the concept,
   guide, reference, and extension pages, then check every claim in them against
   the code.
+- `pi agents --eject <id>`, which copies a shipped persona to
+  `pi/agents/<id>.md` so a project can retune how a role works without
+  locating the installation to copy from. It refuses to overwrite a file
+  already there unless you pass `--force`. Unlike the rest of `pi agents`, the
+  eject form writes to the repository, so the guard governs it mid-run like any
+  other command that does.
+
+### Changed
+
+- `pi/agents/` is now covered by pi's `.gitignore` block, so a persona you
+  retune is yours alone rather than something that appears in the next pull
+  request. Share one deliberately with `git add -f pi/agents/<id>.md`; once git
+  tracks the file, the rule no longer applies to it. `pi/workflows/` is still
+  left visible, since a workflow is the shape of the work and a team agrees on
+  it before anyone runs it.
+
+### Fixed
+
+- Naming a persona that does not exist — `pi agents <typo>` — printed a stack
+  trace instead of listing the ids pi does know.
 
 ## [0.1.0] - 2026-09-11
 

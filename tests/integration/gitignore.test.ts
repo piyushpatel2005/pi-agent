@@ -52,6 +52,11 @@ function status(dir: string): string[] {
     .filter((line) => line.length > 0);
 }
 
+/** Would git hide this path? Asked of git, not of pi's own rules. */
+function ignored(dir: string, path: string): boolean {
+  return spawnSync("git", ["check-ignore", "-q", "--", path], { cwd: dir }).status === 0;
+}
+
 function ignoreFile(dir: string): string {
   return existsSync(join(dir, ".gitignore")) ? readFileSync(join(dir, ".gitignore"), "utf-8") : "";
 }
@@ -76,6 +81,32 @@ describe("a project that installs pi", () => {
 
     assert.equal(pi(dir, "init").code, 0);
     assert.deepEqual(status(dir), ["?? .gitignore"]);
+  });
+
+  test("hides an ejected persona, and lets the team have it on purpose", () => {
+    const dir = repo({ "README.md": "# project\n", ".gitignore": "node_modules/\n" });
+
+    pi(dir, "init", "--yes");
+    assert.equal(pi(dir, "agents", "--eject", "qa-engineer").code, 0);
+
+    // Retuning a role is an experiment until someone decides otherwise.
+    assert.deepEqual(status(dir), ["M .gitignore"]);
+
+    git(dir, "add", "-f", "pi/agents/qa-engineer.md");
+    assert.ok(
+      status(dir).some((line) => line.includes("pi/agents/qa-engineer.md")),
+      "a force-added persona should be stageable",
+    );
+  });
+
+  test("hides persona overrides but not workflow ones", () => {
+    // The asymmetry is the point: a persona is how one person works, a
+    // workflow is the shape of the work everyone is held to.
+    const dir = repo({ "README.md": "# project\n" });
+    pi(dir, "init", "--yes");
+
+    assert.equal(ignored(dir, "pi/agents/qa-engineer.md"), true);
+    assert.equal(ignored(dir, "pi/workflows/mine.workflow.json"), false);
   });
 
   test("keeps the project's own ignore rules", () => {

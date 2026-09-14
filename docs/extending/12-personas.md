@@ -13,7 +13,29 @@ installation, yours live in `pi/agents/` in your repository, and **a project fil
 shadows a shipped one with the same id.**
 
 So you retune `backend-developer` by writing `pi/agents/backend-developer.md` —
-not by editing the installation. `pi agents` marks project ones `(project)`.
+not by editing the installation. `pi agents --eject backend-developer` starts you
+off with a copy of the shipped file.
+
+## Yours by default, shared on purpose
+
+`pi/agents/` is in pi's `.gitignore` block, so a persona you write is yours
+alone. Retuning a role is the first thing most people try, and a half-finished
+experiment with the backend developer should not turn up in a pull request
+nobody opened for it.
+
+Sharing one is a deliberate act:
+
+```bash
+git add -f pi/agents/backend-developer.md
+```
+
+From that point git follows the file and the ignore rule no longer applies to
+it, so later edits show up in `git status` like anything else. That is the same
+mechanism behind pi reporting — rather than ignoring — a `.cursor/hooks.json`
+the project already tracks.
+
+`pi/workflows/` is **not** ignored, and the asymmetry is deliberate: a workflow
+is the shape of the work, which a team agrees on before anyone runs it.
 
 ## The eight shipped roles
 
@@ -151,21 +173,25 @@ objective and the artifacts.
 
 ## Changing a shipped role
 
-Start from the shipped file so you are editing something that works. It lives in
-your pi checkout, not in your project:
+Start from the shipped file so you are editing something that works. `--eject`
+copies it into your project, so you do not have to find the installation:
 
 ```bash
-cp /path/to/pi/core/agents/qa-engineer.md pi/agents/qa-engineer.md
+pi agents --eject qa-engineer     # writes pi/agents/qa-engineer.md
 ```
+
+It refuses to overwrite a file already there; pass `--force` when you mean to
+throw your version away and start again from the shipped one.
 
 Note that `pi agents qa-engineer` prints a *rendered* view — resolved tools,
 budget, and body — and is not a persona file. Do not redirect it into one; it
-has no frontmatter and will not parse.
+has no frontmatter and will not parse. `--eject` is the one that writes a file
+you can edit.
 
 Then check the roster picked up your version, and that nothing broke:
 
 ```bash
-pi agents                 # yours should be marked (project)
+pi agents qa-engineer     # your description and body, if the override took
 pi doctor
 ```
 
@@ -178,7 +204,7 @@ you which workflow.
 ## Checking your work
 
 ```bash
-pi agents                 # the roster, project files marked
+pi agents                 # the roster, yours included
 pi agents data-engineer   # frontmatter and body as pi sees them
 pi doctor                 # what failed to load, and why
 ```

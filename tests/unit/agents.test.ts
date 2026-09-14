@@ -1,8 +1,19 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, test } from "node:test";
 
 import {
   AgentError,
+  ejectAgent,
   loadAgents,
   parseAgent,
   renderBrief,
@@ -156,6 +167,67 @@ describe("the shipped roster", () => {
 
   test("requireAgent explains itself on a miss", () => {
     assert.throws(() => requireAgent(roster, "scrum-master"), /no persona "scrum-master"/);
+  });
+});
+
+describe("ejectAgent", () => {
+  let project: string;
+
+  beforeEach(() => {
+    project = mkdtempSync(join(tmpdir(), "pi-eject-"));
+  });
+
+  afterEach(() => {
+    rmSync(project, { recursive: true, force: true });
+  });
+
+  test("copies a shipped persona into the project, where it shadows", () => {
+    const result = ejectAgent(project, "qa-engineer");
+
+    assert.equal(result.path, "pi/agents/qa-engineer.md");
+    assert.equal(result.overwrote, false);
+
+    const ejected = readFileSync(join(project, result.path), "utf-8");
+    assert.match(ejected, /^---\nid: qa-engineer\n/);
+
+    // The whole point: what landed is a file the loader accepts and prefers.
+    const agent = requireAgent(loadAgents(project), "qa-engineer");
+    assert.equal(agent.source, join(project, "pi", "agents", "qa-engineer.md"));
+  });
+
+  test("refuses to overwrite the project's edits without --force", () => {
+    ejectAgent(project, "qa-engineer");
+    writeFileSync(join(project, "pi", "agents", "qa-engineer.md"), "edited", "utf-8");
+
+    assert.throws(() => ejectAgent(project, "qa-engineer"), /already exists/);
+    assert.equal(readFileSync(join(project, "pi", "agents", "qa-engineer.md"), "utf-8"), "edited");
+
+    const forced = ejectAgent(project, "qa-engineer", { force: true });
+    assert.equal(forced.overwrote, true);
+    assert.match(readFileSync(join(project, forced.path), "utf-8"), /^---\nid: qa-engineer\n/);
+  });
+
+  test("ejects the shipped file even once the project has its own", () => {
+    mkdirSync(join(project, "pi", "agents"), { recursive: true });
+    writeFileSync(
+      join(project, "pi", "agents", "qa-engineer.md"),
+      agentFile("id: qa-engineer\nname: Ours\ndescription: Ours."),
+      "utf-8",
+    );
+
+    ejectAgent(project, "qa-engineer", { force: true });
+    assert.match(
+      readFileSync(join(project, "pi", "agents", "qa-engineer.md"), "utf-8"),
+      /description: Designs the test strategy/,
+    );
+  });
+
+  test("names the alternatives for an id pi does not ship", () => {
+    assert.throws(
+      () => ejectAgent(project, "scrum-master"),
+      /pi ships no persona "scrum-master".*qa-engineer/s,
+    );
+    assert.ok(!existsSync(join(project, "pi")));
   });
 });
 

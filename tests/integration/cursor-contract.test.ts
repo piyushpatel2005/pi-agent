@@ -258,6 +258,14 @@ describe("pi's own commands stay reachable", () => {
     assert.equal(shell(dir, `node ${CLI} status`).permission, "allow");
   });
 
+  test("reading a persona is still allowed, ejected or not", () => {
+    const dir = project();
+    pi(dir, "start", "Let me read the roster");
+
+    assert.equal(shell(dir, "pi agents").permission, "allow");
+    assert.equal(shell(dir, "pi agents qa-engineer").permission, "allow");
+  });
+
   test("will not mint the human turn a gate is waiting for", () => {
     // The one verb a model must never reach. If it could run this, it could
     // manufacture the presence that makes a gate mean something and then
@@ -275,6 +283,10 @@ describe("pi's own commands stay reachable", () => {
     "pi abandon",
     "pi start \"something else\"",
     "pi install",
+    // Reading a persona is a control verb; writing one is not. `--eject` would
+    // otherwise be an unguarded way to rewrite the rules the run is judged by.
+    "pi agents --eject qa-engineer",
+    "pi agents --eject=qa-engineer --force",
   ]) {
     test(`does not hand over \`${command}\``, () => {
       // Each of these either removes the guard or discards the run, which would

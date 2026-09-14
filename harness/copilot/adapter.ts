@@ -80,6 +80,17 @@ const CONTROL_VERBS: ReadonlySet<string> = new Set([
 const HUMAN_TURN = "human-turn";
 const SHELL_METACHARACTERS = /[;&|<>`$()]/;
 
+/**
+ * Same split as harness/cursor/adapter.ts: `pi agents` reads a persona, but
+ * `pi agents --eject` writes one into the repository, so the eject form falls
+ * through to the guard rather than being waved past it.
+ */
+function isControlCommand(command: string, verb: string): boolean {
+  if (!CONTROL_VERBS.has(verb)) return false;
+
+  return !(verb === "agents" && /(^|\s)--eject(=|\s|$)/.test(command));
+}
+
 /** The pi verb this command invokes, or null if it is not a bare pi command. */
 function piVerb(command: string): string | null {
   if (SHELL_METACHARACTERS.test(command)) return null;
@@ -179,7 +190,7 @@ function guard(input: CopilotInput): string {
           "the human what you have done and end your turn.",
       );
     }
-    if (verb !== null && CONTROL_VERBS.has(verb)) return "";
+    if (verb !== null && isControlCommand(command, verb)) return "";
   }
 
   const workspace = openWorkspace(projectDir);

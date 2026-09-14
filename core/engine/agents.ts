@@ -5,7 +5,7 @@
 // docs live, what this step may touch, how much it may change) come from
 // configuration, so persona files stay about the role and nothing else.
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { AgentSpec, effectiveTools, type Agent } from "../schemas/agent.ts";
@@ -16,6 +16,9 @@ import { FrontmatterError, parseFrontmatter } from "./frontmatter.ts";
 
 /** Personas that ship with pi, resolved relative to this file. */
 const SHIPPED_AGENTS = join(import.meta.dirname, "..", "agents");
+
+/** Where a project keeps its own personas. Committed, unlike run history. */
+export const PROJECT_AGENTS = join("pi", "agents");
 
 export class AgentError extends Error {
   readonly source: string;
@@ -43,7 +46,7 @@ export function loadAgents(projectDir: string): AgentRoster {
   const agents = new Map<string, Agent>();
   const broken: AgentRoster["broken"] = [];
 
-  for (const dir of [SHIPPED_AGENTS, join(projectDir, "pi", "agents")]) {
+  for (const dir of [SHIPPED_AGENTS, join(projectDir, PROJECT_AGENTS)]) {
     if (!existsSync(dir)) continue;
 
     for (const entry of readdirSync(dir).sort()) {
@@ -103,6 +106,67 @@ export function rosterContext(roster: AgentRoster): {
   for (const [id, agent] of roster.agents) agentTools[id] = agent.tools;
 
   return { agents: [...roster.agents.keys()], agentTools };
+}
+
+// ── Ejecting ────────────────────────────────────────────────────────────────
+
+export type EjectResult = {
+  /** Where the copy landed, relative to the project. */
+  path: string;
+  /** Whether a project file of the same id was replaced. */
+  overwrote: boolean;
+};
+
+/**
+ * Copy a shipped persona into the project so a team can retune it.
+ *
+ * Retuning a role has always worked — `loadAgents` reads project files after
+ * shipped ones, so a matching id shadows — but getting the starting file meant
+ * locating an installation nobody chose the path of. Copying from a known-good
+ * file also beats writing one from scratch: the body of a shipped persona is
+ * the part worth keeping, and the frontmatter is the part that is easy to get
+ * subtly wrong.
+ */
+export function ejectAgent(
+  projectDir: string,
+  id: string,
+  options: { force?: boolean } = {},
+): EjectResult {
+  const source = join(SHIPPED_AGENTS, `${id}.md`);
+
+  // Deliberately the shipped file and not the roster's: once a project has
+  // ejected a persona, `requireAgent` would hand back its own copy, and
+  // ejecting again would overwrite the team's edits with the team's edits.
+  if (!existsSync(source)) {
+    throw new AgentError("eject", `pi ships no persona "${id}". Shipped: ${shippedIds().join(", ")}`);
+  }
+
+  const path = `${PROJECT_AGENTS}/${id}.md`;
+  const target = join(projectDir, PROJECT_AGENTS, `${id}.md`);
+  const overwrote = existsSync(target);
+
+  if (overwrote && !options.force) {
+    throw new AgentError(
+      "eject",
+      `${path} already exists, and overwriting it would discard whatever you ` +
+        `changed. Pass --force if that is what you want.`,
+    );
+  }
+
+  mkdirSync(join(projectDir, PROJECT_AGENTS), { recursive: true });
+  copyFileSync(source, target);
+
+  return { path, overwrote };
+}
+
+/** The ids pi ships a file for, so a typo is answered with the alternatives. */
+function shippedIds(): string[] {
+  if (!existsSync(SHIPPED_AGENTS)) return [];
+
+  return readdirSync(SHIPPED_AGENTS)
+    .filter((entry) => entry.endsWith(".md"))
+    .map((entry) => entry.slice(0, -".md".length))
+    .sort();
 }
 
 // ── The brief ───────────────────────────────────────────────────────────────

@@ -23,10 +23,20 @@ export const END = "# <<< pi <<<";
  * `pi/` directory that happens to exist somewhere in a source tree.
  */
 export const OWNED: readonly string[] = [
-  // Run history only. `pi/workflows/` and `pi/agents/` are authored content —
-  // a team's own workflows and persona overrides — and hiding those would mean
-  // pi's extension points could never be committed.
   "/pi/runs/",
+  // Persona overrides are ignored because retuning a role is the first thing
+  // someone tries, and a half-finished experiment with the backend developer
+  // should not arrive in a pull request nobody opened for it.
+  //
+  // Sharing one is then a deliberate act rather than a default: `git add -f`
+  // the file, and from that point git follows it and this rule is inert — the
+  // same mechanism that makes pi report, rather than ignore, a `hooks.json`
+  // the project already tracks.
+  //
+  // `pi/workflows/` is deliberately not here. A workflow is the shape of the
+  // work itself, which a team agrees on before anyone runs it, so hiding it by
+  // default would hide the thing most worth reviewing.
+  "/pi/agents/",
   "/pi.config.json",
   "/.cursor/skills/pi/",
   "/.cursor/rules/pi.mdc",
@@ -204,6 +214,26 @@ export function tracked(projectDir: string, paths: readonly string[]): string[] 
     return out.split("\n").filter((line) => line.length > 0);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Would git hide this path if it were written?
+ *
+ * Asked of git rather than worked out from `OWNED`, because the answer is the
+ * project's to give: the block may have been skipped with `--no-gitignore`, a
+ * line may have been deleted, and a file git already tracks is not ignored no
+ * matter what any rule says.
+ */
+export function ignores(projectDir: string, path: string): boolean {
+  try {
+    execFileSync("git", ["check-ignore", "-q", "--", path], {
+      cwd: projectDir,
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
   }
 }
 

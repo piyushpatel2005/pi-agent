@@ -9,8 +9,9 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
-import { renderBrief, requireAgent } from "../core/engine/agents.ts";
+import { AgentError, ejectAgent, renderBrief, requireAgent } from "../core/engine/agents.ts";
 import { createEventLog } from "../core/engine/event-log.ts";
+import { ignores } from "../core/engine/gitignore.ts";
 import {
   HARNESS_PRODUCT_NAME,
   InstallError,
@@ -19,7 +20,6 @@ import {
   requireHarness,
   uninstall,
 } from "../core/engine/install.ts";
-import { applyIgnore } from "../core/engine/gitignore.ts";
 import {
   Permission,
   denialEvent,
@@ -50,6 +50,8 @@ import { SENSORS, renderSensors, runSensors } from "../core/engine/sensors.ts";
 import { createStateStore } from "../core/engine/state-store.ts";
 import {
   CONFIG_FILE,
+  ensureProjectScaffold,
+  newProjectConfig,
   WorkspaceError,
   activeRunId,
   listRunSummaries,
@@ -69,6 +71,7 @@ import { RunState, RunStatus, STATE_VERSION, StepStatus } from "../core/schemas/
 import { serveStaticSite } from "../core/docs/serve.ts";
 import { buildStaticSite } from "../core/docs/site.ts";
 import { VERSION, versionInfo } from "../core/version.ts";
+import { resolveHarnessChoice } from "./harness-choice.ts";
 
 type Args = {
   positional: string[];
@@ -120,7 +123,7 @@ function wantsJson(args: Args): boolean {
 
 // ── Commands ────────────────────────────────────────────────────────────────
 
-function cmdInit(projectDir: string, args: Args): number {
+async function cmdInit(projectDir: string, args: Args): Promise<number> {
   const configPath = join(projectDir, CONFIG_FILE);
 
   if (existsSync(configPath) && args.flags.get("force") !== true) {
@@ -128,42 +131,25 @@ function cmdInit(projectDir: string, args: Args): number {
     return 1;
   }
 
-  const config = {
-    version: 1,
-    harness: flagString(args, "harness") ?? "cursor",
-    defaultWorkflow: "feature",
-    docs: {
-      dir: "docs",
-      files: ["README.md"],
-      required: true,
-      exempt: ["tests/", "test/", "**/*.test.*", "dist/"],
-    },
-    facts: {
-      hasFrontend: true,
-      hasBackend: true,
-      needsInfra: false,
-    },
-    // Left empty deliberately: the type-check and linter sensors skip rather
-    // than guess, so fill these in with this project's real commands.
-    checks: {},
-  };
+  const harness = await resolveHarnessChoice({
+    harness: flagString(args, "harness"),
+    yes: args.flags.get("yes") === true,
+    initDefault: "cursor",
+  });
 
-  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
-  mkdirSync(join(projectDir, "pi", "workflows"), { recursive: true });
+  writeFileSync(configPath, `${JSON.stringify(newProjectConfig(harness), null, 2)}\n`, "utf-8");
+  const scaffolded = ensureProjectScaffold(projectDir, harness, {
+    noGitignore: args.flags.get("no-gitignore") === true,
+  });
+  const created = [CONFIG_FILE, ...scaffolded.filter((path) => path !== CONFIG_FILE)];
 
-  console.log(`Wrote ${CONFIG_FILE} and pi/workflows/.`);
-
-  // Both files just appeared in someone's `git status`. Ignore them now rather
-  // than at `pi install`, which may not be the next thing they run.
-  if (args.flags.get("no-gitignore") !== true) {
-    const ignored = applyIgnore(projectDir, []);
-    if (ignored.wrote) console.log(`Wrote ${ignored.wrote}.`);
-  }
+  console.log(`Wrote ${created.join(", ")}.`);
 
   console.log("");
   console.log("Next:");
   console.log(`  1. Edit ${CONFIG_FILE} — the "facts" decide which steps apply to this project.`);
-  console.log('  2. Run `pi start "what you want to build"`.');
+  console.log(`  2. Run \`pi install\` to wire pi into ${HARNESS_PRODUCT_NAME[harness as keyof typeof HARNESS_PRODUCT_NAME] ?? harness}.`);
+  console.log('  3. Run `pi start "what you want to build"`.');
   return 0;
 }
 
@@ -227,9 +213,21 @@ function cmdRuns(workspace: Workspace, args: Args): number {
   return 0;
 }
 
-function cmdInstall(workspace: Workspace, args: Args): number {
-  const harness = flagString(args, "harness") ?? workspace.config.harness;
+async function cmdInstall(workspace: Workspace, args: Args): Promise<number> {
+  const harness = await resolveHarnessChoice({
+    harness: flagString(args, "harness"),
+    yes: args.flags.get("yes") === true,
+    configured: workspace.config.harness,
+  });
+
   const noGitignore = args.flags.get("no-gitignore") === true;
+  const scaffolded = ensureProjectScaffold(workspace.projectDir, harness, { noGitignore });
+  if (scaffolded.length > 0) {
+    console.log("Project setup:");
+    for (const path of scaffolded) console.log(`  ${path}`);
+    console.log("");
+  }
+
   const result = install(workspace.projectDir, harness, { noGitignore });
 
   console.log(`Wired pi into ${harness}:`);
@@ -242,8 +240,12 @@ function cmdInstall(workspace: Workspace, args: Args): number {
   return 0;
 }
 
-function cmdUninstall(workspace: Workspace, args: Args): number {
-  const harness = flagString(args, "harness") ?? workspace.config.harness;
+async function cmdUninstall(workspace: Workspace, args: Args): Promise<number> {
+  const harness = await resolveHarnessChoice({
+    harness: flagString(args, "harness"),
+    yes: args.flags.get("yes") === true,
+    configured: workspace.config.harness,
+  });
   // Before asking whether it is installed: "emacs is not wired in" is a true
   // sentence and a useless one when the real answer is that emacs is not a
   // harness pi has.
@@ -423,8 +425,13 @@ function cmdNext(workspace: Workspace, args: Args): number {
 }
 
 function cmdAgents(workspace: Workspace, args: Args): number {
-  const id = args.positional[0];
+  const eject = args.flags.get("eject");
+  // Both orders read naturally, and `--eject <id>` swallows the id as its own
+  // value, so the id can arrive as either.
+  const id = args.positional[0] ?? (typeof eject === "string" ? eject : undefined);
   const roster = workspace.roster;
+
+  if (eject !== undefined) return cmdEjectAgent(workspace, id, args);
 
   if (!id) {
     if (wantsJson(args)) {
@@ -454,6 +461,42 @@ function cmdAgents(workspace: Workspace, args: Args): number {
   }
   console.log("");
   console.log(agent.body);
+  return 0;
+}
+
+/**
+ * Copy a shipped persona into `pi/agents/` for this project to edit.
+ *
+ * Note this writes the persona *file*, not the rendered view `pi agents <id>`
+ * prints. That view resolves tools and budgets and has no frontmatter, so
+ * redirecting it into a file — the obvious thing to try — produces something
+ * that will not parse.
+ */
+function cmdEjectAgent(workspace: Workspace, id: string | undefined, args: Args): number {
+  if (!id) {
+    console.error("Which persona? `pi agents --eject <id>`, or `pi agents` to see them.");
+    return 1;
+  }
+
+  const result = ejectAgent(workspace.projectDir, id, {
+    force: args.flags.get("force") === true,
+  });
+
+  console.log(`${result.overwrote ? "Overwrote" : "Wrote"} ${result.path}.`);
+  console.log("");
+  console.log(`It shadows the shipped \`${id}\` from now on, in this project only. Next:`);
+  console.log(`  1. Edit ${result.path} — the body below the frontmatter is what the model reads.`);
+  console.log("  2. Run `pi doctor` to confirm it parses and your workflows still compile.");
+
+  // Whether this is a private experiment or a change to the team's roster is
+  // the one thing the command cannot decide for you, so say which it is now
+  // rather than let it be discovered in a diff.
+  if (ignores(workspace.projectDir, result.path)) {
+    console.log("");
+    console.log(`Git is ignoring ${result.path}, so it is yours alone. To share it:`);
+    console.log(`  git add -f ${result.path}`);
+  }
+
   return 0;
 }
 
@@ -1275,9 +1318,9 @@ function renderDirective(directive: Directive): void {
 const USAGE = `pi — a workflow harness for coding agents
 
 Usage
-  pi init [--force] [--no-gitignore]       scaffold pi.config.json in this project
-  pi install [--no-gitignore]              wire pi into your coding tool's hooks
-  pi uninstall [--purge]                   take pi back out; --purge drops config+history
+  pi init [--harness cursor|copilot] [--yes]   scaffold pi.config.json (prompts for harness)
+  pi install [--harness cursor|copilot] [--yes] [--no-gitignore]
+  pi uninstall [--harness cursor|copilot] [--yes] [--purge]
   pi start "<goal>" [--workflow <id>]      begin a run
   pi runs [--use <id>] [--json]            list runs, or switch to one
   pi status [--json]                       where the active run is
@@ -1295,6 +1338,7 @@ Usage
   pi log [--step <id>] [--json]            the run's event history
   pi workflows [<id>] [--json]             list workflows, or show one
   pi agents [<id>] [--json]                list personas, or show one
+  pi agents --eject <id> [--force]         copy a shipped persona into pi/agents/ to edit
   pi sensors [--step <id>] [--list]        dry-run the current step's checks
   pi checkpoints                           list the boundaries you can rewind to
   pi rewind --to <step> [--yes]            move the run back to a boundary
@@ -1328,15 +1372,15 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
 
-  if (verb === "init") return cmdInit(projectDir, args);
+  if (verb === "init") return await cmdInit(projectDir, args);
 
   const workspace = openWorkspace(projectDir);
 
   switch (verb) {
     case "install":
-      return cmdInstall(workspace, args);
+      return await cmdInstall(workspace, args);
     case "uninstall":
-      return cmdUninstall(workspace, args);
+      return await cmdUninstall(workspace, args);
     case "start":
       return cmdStart(workspace, args);
     case "next":
@@ -1392,7 +1436,8 @@ try {
     cause instanceof RouterError ||
     cause instanceof ReviewError ||
     cause instanceof CheckpointError ||
-    cause instanceof InstallError
+    cause instanceof InstallError ||
+    cause instanceof AgentError
   ) {
     // Expected, explainable failures: say the one useful sentence, not a stack.
     console.error(cause.message);
